@@ -3,7 +3,7 @@
 import { h } from '../util/dom.js';
 import { pageTitle, listRow } from './common.js';
 
-export const APP_VERSION = '0.1 · Phase 1';
+export const APP_VERSION = '0.2 · Phase 2';
 
 export default {
   async render(ctx) {

@@ -108,13 +108,41 @@ export function scoreCard({ competition, status, clock, home, away, href, foot }
     : final ? badge(clock || 'FT', 'strong') : badge(clock || 'Upcoming');
   const row = (t, side) => h('div', { class: `sc-row${loser === side ? ' loser' : ''}` },
     crest(t),
-    h('span', { class: 'sc-team' }, t.name, t.record ? h('span', { class: 'rec' }, t.record) : null),
+    h('span', { class: 'sc-team' }, t.rank ? h('span', { class: 'sc-rank' }, t.rank) : null, t.name, t.record ? h('span', { class: 'rec' }, t.record) : null),
     status !== 'upcoming' ? h('span', { class: 'sc-score' }, t.score ?? '') : null);
   return h(href ? 'a' : 'div', { class: 'scorecard', href },
     h('div', { class: 'sc-head' }, h('span', { class: 'sc-comp' }, competition || ''), statusBadge),
     row(away, 'away'),
     row(home, 'home'),
     foot ? h('div', { class: 'sc-foot' }, foot) : null);
+}
+
+// ---------------------------------------------------------------- PeriodPicker
+/**
+ * ‹ label › control for stepping through weeks or dates.
+ *   onPrev / onNext: null disables that arrow
+ *   onLabel: tap the label (opens a picker); or pass `labelEl` to supply your own
+ */
+export function periodPicker({ label, sub, onPrev, onNext, onLabel, labelEl }) {
+  const arrow = (dir, fn) => h('button', {
+    class: 'icon-btn pp-arrow', 'aria-label': dir === 'prev' ? 'Previous' : 'Next', disabled: !fn, onclick: fn || null,
+  }, icon(dir === 'prev' ? ICONS.back : ICONS.chevron));
+  const center = labelEl || h(onLabel ? 'button' : 'div', { class: 'pp-label', onclick: onLabel || null },
+    h('span', { class: 'pp-main' }, label), sub ? h('span', { class: 'pp-sub' }, sub) : null);
+  return h('div', { class: 'period-picker' }, arrow('prev', onPrev), center, arrow('next', onNext));
+}
+
+// ---------------------------------------------------------------- Chips (filters)
+/** Single-select filter chips. items: [{ id, label }] */
+export function chips(items, value, onChange, { label = 'Filter' } = {}) {
+  const el = h('div', { class: 'chips', role: 'group', 'aria-label': label });
+  for (const it of items) {
+    el.append(h('button', {
+      class: 'chip', 'aria-pressed': String(it.id === value),
+      onclick: () => onChange(it.id),
+    }, it.label));
+  }
+  return el;
 }
 
 // ---------------------------------------------------------------- StatBar
