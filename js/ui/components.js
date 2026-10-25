@@ -198,3 +198,42 @@ export function listRow({ href, onclick, iconName, leading, title, sub, detail, 
     detail != null ? h('span', { class: 'detail' }, detail) : null,
     chevron ? icon(ICONS.chevron) : null);
 }
+
+// ---------------------------------------------------------------- Sparkline
+/** Tiny trend line (inline SVG). values: numbers (nulls skipped). Ink-colored, last point marked. */
+export function sparkline(values, { width = 64, height = 20, label } = {}) {
+  const pts = values.map((v, i) => [i, v]).filter(([, v]) => typeof v === 'number');
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', width); svg.setAttribute('height', height);
+  svg.setAttribute('class', 'spark');
+  svg.setAttribute('role', 'img');
+  if (label) svg.setAttribute('aria-label', label);
+  if (pts.length < 2) return svg;
+  const xs = pts.map((p) => p[0]); const ys = pts.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const pad = 2;
+  const X = (x) => pad + ((x - x0) / (x1 - x0 || 1)) * (width - 2 * pad);
+  const Y = (y) => height - pad - ((y - y0) / (y1 - y0 || 1)) * (height - 2 * pad);
+  const line = document.createElementNS(svgNS, 'polyline');
+  line.setAttribute('points', pts.map(([x, y]) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join(' '));
+  line.setAttribute('class', 'spark-line');
+  const dot = document.createElementNS(svgNS, 'circle');
+  const [lx, ly] = pts[pts.length - 1];
+  dot.setAttribute('cx', X(lx)); dot.setAttribute('cy', Y(ly)); dot.setAttribute('r', 2);
+  dot.setAttribute('class', 'spark-dot');
+  svg.append(line, dot);
+  return svg;
+}
+
+// ---------------------------------------------------------------- Percentile bar (fingerprint row)
+/** One fingerprint row: label, bar to the percentile (100 = best), value and rank. */
+export function percentileRow({ label, pct, value, rank, n }) {
+  return h('div', { class: 'pctl-row' },
+    h('div', { class: 'pctl-top' }, h('span', { class: 'pctl-label' }, label), h('span', { class: 'pctl-val' }, value, rank ? h('span', { class: 'pctl-rank' }, `${rank}/${n}`) : null)),
+    h('div', { class: 'pctl-track', role: 'img', 'aria-label': `${label}: ${pct ?? 'no'} percentile` },
+      h('span', { class: 'pctl-fill', style: { width: `${pct ?? 0}%` } }),
+      h('span', { class: 'pctl-mid' }),
+      h('span', { class: 'pctl-num' }, pct == null ? '–' : String(pct))));
+}

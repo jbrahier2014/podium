@@ -12,7 +12,8 @@
 //   getStandings(league)                → { views: { id: { label, groups } }, records } [phase 4]
 //   getRoster(league, teamId)           → { groups: [{ name, players }] }             [phase 4]
 //   getTeamStats(league, teamId)        → { groups: [{ name, rows: [{ label, value, rank? }] }] } [phase 4]
-//   getComputed(name)                   → JSON written by the GitHub Action          [phase 5]
+//   getRatings(league, season?)         → nightly ratings + advanced stats file      [phase 5]
+//   getMeta()                           → when the nightly job ran, sources status    [phase 5]
 //
 // Team:  { league, id, name, short, abbr, color, altColor, logo, conference?, rank? }
 //
@@ -142,6 +143,29 @@ export function needsLiveUpdates(games) {
 }
 
 /** JSON files produced by the scheduled GitHub Action (relative to the site). */
-export function getComputed(path, { ttlMs = 30 * 60_000 } = {}) {
-  return track('computed', cachedJSON(`data/${path}`, { ttlMs }));
+export function getComputed(path, { ttlMs = 30 * 60_000, final = false } = {}) {
+  return track('computed', cachedJSON(`data/${path}`, { ttlMs, final }));
+}
+
+/** When the nightly job last ran and which seasons exist. */
+export const getMeta = () => getComputed('meta.json', { ttlMs: 10 * 60_000 }).then((r) => r.data);
+
+/**
+ * Ratings and advanced stats for one league and season (written by the nightly job).
+ * Finished seasons never change, so they're cached for good.
+ * Resolves to the season file: { season, asOf, generatedAt, hfa, sigma, histKeys, histLabels, teams: [{ id, v, hist, ... }] }
+ */
+export async function getRatings(league, season) {
+  if (!season) {
+    const meta = await getMeta().catch(() => null);
+    season = meta?.leagues?.[league]?.current ?? seasonYear(league);
+  }
+  const { data } = await getComputed(`${league}/${season}.json`, { ttlMs: 30 * 60_000, final: (d) => !!d?.final });
+  return data;
+}
+
+/** Seasons with nightly data for a league, newest first. */
+export async function getRatingSeasons(league) {
+  const meta = await getMeta().catch(() => null);
+  return meta?.leagues?.[league]?.seasons || [seasonYear(league)];
 }

@@ -7,7 +7,9 @@ import { h, clear } from '../util/dom.js';
 import { etLongDay } from '../util/time.js';
 import { settings } from '../store/settings.js';
 import { LEAGUES, inSeason } from '../leagues.js';
-import { getTeamSchedule, getTodayGames, getTeams, sortGames, needsLiveUpdates } from '../data/index.js';
+import { getTeamSchedule, getTodayGames, getTeams, getRatings, sortGames, needsLiveUpdates } from '../data/index.js';
+import { STATS, fmt, percentiles, ordinal, SCOPE } from '../data/statdefs.js';
+import { etISODate } from '../util/time.js';
 import { livePoller } from '../util/poller.js';
 import { crest, badge } from '../ui/components.js';
 import { gameCard, resultLine, nextLine } from '../ui/format.js';
@@ -24,6 +26,12 @@ export default {
     cards.forEach((c) => drawCard(c.el, c.team, null, null));
 
     const today = h('div', {}, h('div', { class: 'game-list' }, h('div', { class: 'skeleton', style: { height: '112px', borderRadius: 'var(--radius-md)' } })));
+    const dyk = h('div', { class: 'card' }, h('div', { class: 'skeleton', style: { height: '96px' } }));
+
+    // Nightly ratings for each featured league: power rank on the cards + the daily outlier
+    const ratings = {};
+    const ratingLoads = Promise.all([...new Set(teams.map((t) => t.league))].map((l) =>
+      getRatings(l).then((d) => { ratings[l] = d; }).catch(() => {})));
 
     ctx.el.append(
       ...pageTitle('Home', etLongDay(new Date())),
@@ -33,11 +41,7 @@ export default {
       sectionHeader({ title: 'Today', action: 'Scoreboard', href: '#/scores' }),
       today,
       sectionHeader({ title: 'Did you know?' }),
-      h('div', { class: 'card' }, emptyState({
-        iconName: 'bulb',
-        title: 'Daily outlier',
-        text: 'One unusual number about your teams, each day, once the nightly stats run.',
-      })),
+      dyk,
     );
 
     // Team schedules (cached ~10 min) and today's games load in parallel.
@@ -55,13 +59,14 @@ export default {
     const drawAll = async () => {
       const idx = await cfbIdx;
       if (!ctx.isCurrent()) return;
-      cards.forEach((c) => drawCard(c.el, c.team, schedules.get(c.team), todayGames[c.team.league] || [], idx));
+      cards.forEach((c) => drawCard(c.el, c.team, schedules.get(c.team), todayGames[c.team.league] || [], idx, powerRank(ratings[c.team.league], c.team)));
       drawToday(today, todayGames);
     };
 
     try { todayGames = await getTodayGames(); } catch { todayGames = {}; }
-    await Promise.all(scheduleLoads);
+    await Promise.all([...scheduleLoads, ratingLoads]);
     await drawAll();
+    drawDidYouKnow(dyk, teams, ratings);
 
     const all = () => Object.values(todayGames).flat();
     const poller = livePoller({
@@ -79,7 +84,7 @@ export default {
 };
 
 // ---------------------------------------------------------------- featured card
-function drawCard(el, team, sched, todays, cfbIdx) {
+function drawCard(el, team, sched, todays, cfbIdx, power) {
   clear(el);
   const league = LEAGUES[team.league];
 
@@ -117,7 +122,7 @@ function drawCard(el, team, sched, todays, cfbIdx) {
     h('div', { class: 'tc-stats' },
       stat('Record', sched?.record || '–'),
       team.league === 'cfb' ? stat('AP rank', sched ? (rank ? `#${rank}` : 'NR') : '–') : null,
-      stat('Power rank', '–')),
+      stat('Power rank', power ? `#${power}` : '–')),
   );
 }
 
@@ -162,4 +167,63 @@ function drawToday(el, todayGames) {
       h('div', { class: 'group-label' }, LEAGUES[l].name),
       h('div', { class: 'game-list' }, sortGames(todayGames[l]).map((g) => gameCard(g))));
   }
+}
+
+// ---------------------------------------------------------------- power rank
+/** Rank on the league's primary rating: Predictor (CFB), SRS (NFL), Pythagorean win % (MLB). */
+export function powerRank(data, team) {
+  const me = data?.teams?.find((t) => t.id === String(team.id));
+  if (!me) return null;
+  if (team.league === 'cfb') return me.v.pred_rank ?? null;
+  if (team.league === 'nfl') return me.v.srs_rank ?? null;
+  const pp = (t) => { const g = (t.v.pyth_w ?? 0) + (t.v.pyth_l ?? 0); return g ? t.v.pyth_w / g : 0; };
+  return [...data.teams].sort((a, b) => pp(b) - pp(a)).findIndex((t) => t.id === me.id) + 1;
+}
+
+// ---------------------------------------------------------------- did you know
+/**
+ * One outlier per day about a featured team: the stat where the team sits furthest
+ * from the league median (top or bottom 10%), or a big luck gap. Rotates daily.
+ */
+function drawDidYouKnow(el, teams, ratings) {
+  clear(el);
+  const facts = [];
+  for (const team of teams) {
+    const data = ratings[team.league];
+    const me = data?.teams?.find((t) => t.id === String(team.id));
+    if (!me) continue;
+    const name = team.short || team.name;
+    const n = data.teams.length;
+    for (const def of STATS[team.league]) {
+      if (def.hib == null || me.v[def.key] == null) continue;
+      const p = percentiles(data.teams, def).get(me.id);
+      if (!p) continue;
+      const extreme = p.rank <= Math.max(3, Math.round(n * 0.05)) || p.rank > p.n - Math.max(3, Math.round(n * 0.05));
+      if (!extreme) continue;
+      const best = p.rank <= p.n / 2;
+      const where = p.rank === 1 ? `the best in ${SCOPE[team.league]}` : p.rank === p.n ? `the worst in ${SCOPE[team.league]}` : best ? `${ordinal(p.rank)} in ${SCOPE[team.league]}` : `${ordinal(p.n - p.rank + 1)}-worst in ${SCOPE[team.league]}`;
+      const label = /^[A-Z]{2,}|^[A-Z]-|^x?wOBA|^ERA|^FIP|^WHIP|^OPS|^BABIP|^SP\+|^K-BB|^SRS|^EPA/.test(def.label) ? def.label : def.label.charAt(0).toLowerCase() + def.label.slice(1);
+      facts.push({ team, score: Math.abs(p.pct - 50) + (def.fp ? 5 : 0), text: `${name}: ${fmt(me.v[def.key], def.fmt)} ${label}, ${where}.` });
+    }
+    const luck = me.v.luck;
+    if (luck != null && Math.abs(luck) >= (team.league === 'mlb' ? 4 : 1.2)) {
+      const unit = team.league === 'mlb' ? 'run differential' : 'point differential';
+      const pyth = Math.round(me.v.pyth_w);
+      facts.push({ team, score: 60 + Math.abs(luck), text: `${name} ${/s$/.test(name) ? 'have' : 'has'} ${me.v.wins} wins, but their ${unit} says ${pyth}. That ${Math.abs(luck).toFixed(1)}-win ${luck > 0 ? 'cushion usually shrinks' : 'shortfall usually corrects'} over time.` });
+    }
+  }
+  if (!facts.length) {
+    el.append(emptyState({ iconName: 'bulb', title: 'Daily outlier', text: 'One unusual number about your teams, each day, once the nightly stats run.' }));
+    return;
+  }
+  // Best fact per team, then rotate through teams by day
+  const perTeam = new Map();
+  facts.sort((a, b) => b.score - a.score).forEach((f) => { if (!perTeam.has(f.team)) perTeam.set(f.team, []); perTeam.get(f.team).push(f); });
+  const pool = [...perTeam.values()];
+  const day = Math.floor(Date.parse(`${etISODate()}T12:00:00Z`) / 86400000);
+  const list = pool[day % pool.length];
+  const fact = list[Math.floor(day / pool.length) % Math.min(list.length, 3)];
+  el.append(h('a', { class: 'dyk', href: `#/team/${fact.team.league}/${fact.team.id}?tab=advanced` },
+    crest(fact.team),
+    h('div', {}, h('div', { class: 'dyk-text' }, fact.text), h('div', { class: 't-caption', style: { marginTop: 'var(--space-1)' } }, 'See the full fingerprint'))));
 }

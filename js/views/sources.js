@@ -19,6 +19,12 @@ const CHECKS = [
     read: (j) => (j.generatedAt ? `Last run ${new Date(j.generatedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} ET` : 'Not generated yet') },
 ];
 
+const JOB_SOURCES = {
+  cfb: { name: 'College football (CollegeFootballData)', keys: { advanced: 'Advanced stats', sp: 'SP+', season_stats: 'Season stats', drives: 'Drives', talent: 'Talent', returning: 'Returning production' } },
+  nfl: { name: 'NFL (nflverse play-by-play)', keys: { pbp: 'Play-by-play' } },
+  mlb: { name: 'MLB (Stats API + Baseball Savant)', keys: { statsapi: 'MLB Stats API', savant: 'Baseball Savant Statcast' } },
+};
+
 export default {
   async render(ctx) {
     ctx.setTitle('Data sources');
@@ -42,9 +48,24 @@ export default {
           });
       }
     };
+    const job = h('div');
+    fetch(`data/meta.json?t=${Date.now()}`, { cache: 'no-store' }).then((r) => r.json()).then((meta) => {
+      const rows = [];
+      for (const [lg, src] of Object.entries(JOB_SOURCES)) {
+        const m = meta.leagues?.[lg];
+        if (!m) continue;
+        const problems = [...(m.errors || []), ...Object.entries(m.status || {}).filter(([k, v]) => src.keys[k] && v !== 'ok').map(([k, v]) => `${src.keys[k]}: ${v}`)];
+        rows.push(h('div', { class: 'list-item' },
+          h('span', { class: 'grow' }, h('div', { class: 'title' }, src.name),
+            h('div', { class: 'sub' }, problems.length ? problems.join(' \u00b7 ') : `Through ${m.asOf || '\u2013'} \u00b7 seasons ${(m.seasons || []).join(', ')}`)),
+          problems.length ? badge('Problem', 'strong') : badge('OK', 'win')));
+      }
+      if (rows.length) job.append(h('div', { class: 'group-label' }, 'Nightly job sources'), h('div', { class: 'list' }, rows));
+    }).catch(() => {});
     ctx.el.append(
       ...pageTitle('Data sources', 'A live check from this device'),
       list,
+      job,
       h('div', { style: { margin: 'var(--space-4) var(--gutter) 0' } }, button('Check again', { variant: 'secondary', onclick: run })),
       h('p', { class: 'footnote' }, 'Advanced stats (CollegeFootballData, nflverse, Baseball Savant) are fetched by the nightly GitHub Action, not your phone. They show up under Nightly stats.'),
     );

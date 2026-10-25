@@ -4,10 +4,11 @@
 
 import { h, icon, ICONS, toast, clear } from '../util/dom.js';
 import { settings } from '../store/settings.js';
-import { getTeams, getTeamSchedule, getRoster, getStandings, getTeamStats } from '../data/index.js';
+import { getTeams, getTeamSchedule, getRoster, getStandings, getTeamStats, getRatings, getRatingSeasons } from '../data/index.js';
+import { STATS, fmt, percentiles, ordinal, SCOPE } from '../data/statdefs.js';
 import { LEAGUES, seasonYear } from '../leagues.js';
 import { etDay, etTime, etISODate } from '../util/time.js';
-import { crest, tabs, badge, emptyState, standingsTable } from '../ui/components.js';
+import { crest, tabs, badge, chips, emptyState, standingsTable, percentileRow } from '../ui/components.js';
 import { resultLine } from '../ui/format.js';
 import { navigate } from '../router.js';
 
@@ -176,12 +177,26 @@ const TAB_RENDERERS = {
     return out;
   },
 
-  async advanced({ team }) {
-    return h('div', { class: 'card' }, emptyState({
-      iconName: 'scatter',
-      title: 'Advanced stats',
-      text: `${team.short || team.name}’s advanced numbers and a percentile fingerprint across 15 key stats arrive with the nightly stats (phase 5).`,
-    }));
+  async advanced({ league, id, team, load }) {
+    const seasons = await load('seasons', () => getRatingSeasons(league));
+    const out = h('div');
+    const draw = async (season) => {
+      clear(out);
+      out.append(h('div', { class: 'skeleton', style: { height: '300px', margin: '0 var(--gutter)', borderRadius: 'var(--radius-md)' } }));
+      let data;
+      try { data = await load(`ratings-${season}`, () => getRatings(league, season)); } catch (err) {
+        clear(out);
+        out.append(h('div', { class: 'card' }, emptyState({ iconName: 'scatter', title: 'Advanced stats not available yet', text: `The nightly stats haven\u2019t run for this season. (${err.message})` })));
+        return;
+      }
+      clear(out);
+      out.append(...advancedContent(league, id, team, data));
+    };
+    const wrap = [];
+    if (seasons.length > 1) wrap.push(chips(seasons.map((x) => ({ id: x, label: String(x) })), seasons[0], (x) => { wrap[0].querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c.textContent === String(x)))); draw(x); }, { label: 'Season' }));
+    wrap.push(out);
+    draw(seasons[0]);
+    return wrap;
   },
 };
 
@@ -215,4 +230,96 @@ function standings(group, teamId, featured) {
   const cols = group.columns.map((c) => ({ key: c.key, label: c.label }));
   const rows = group.rows.map((r) => ({ ...r.values, rank: r.rank, team: r.team, followed: r.team.id === String(teamId) || featured.has(r.team.id) }));
   return standingsTable({ columns: cols, rows, cutAfter: group.cutAfter, onRowClick: (r) => navigate(`team/${r.team.league}/${r.team.id}`) });
+}
+
+// ---------------------------------------------------------------- Advanced tab
+const SUMMARY = {
+  cfb: [['pred', 'Predictor', 'dec1', 'pred_rank'], ['elo', 'Elo', 'int'], ['srs', 'SRS', 'dec1'], ['sp', 'SP+', 'dec1'], ['sos_rank', 'Schedule rank', 'int'], ['top25', 'vs Top 25', 'rec'], ['top50', 'vs Top 50', 'rec']],
+  nfl: [['srs', 'SRS', 'dec1', 'srs_rank'], ['elo', 'Elo', 'int'], ['pyth_w', 'Pythagorean wins', 'dec1'], ['luck', 'Luck', 'signed1'], ['po', 'Playoff odds', 'odds'], ['div', 'Division odds', 'odds'], ['bye', '#1 seed odds', 'odds']],
+  mlb: [['rd', 'Run differential', 'signed0', 'rd_rank'], ['pyth_w', 'Pythagorean wins', 'dec1'], ['luck', 'Luck', 'signed1'], ['one_run', 'One-run games', 'rec'], ['extra', 'Extra innings', 'rec'], ['po', 'Playoff odds', 'odds'], ['div', 'Division odds', 'odds']],
+};
+const HIST_NAMES = { pred: 'Predictor', srs: 'SRS', elo: 'Elo', pyth_pct: 'Pythagorean win %', win_pct: 'Win %' };
+
+function advancedContent(league, id, team, data) {
+  const me = data.teams.find((t) => t.id === String(id));
+  if (!me) return [h('div', { class: 'card' }, emptyState({ iconName: 'scatter', title: 'No advanced stats for this team', text: `Not in the ${data.season} ${LEAGUES[league].name} data.` }))];
+  const defs = STATS[league];
+  const out = [];
+  const showOdds = (v) => (v == null ? null : v >= 99.95 ? '>99.9%' : v > 0 && v < 0.1 ? '<0.1%' : `${v.toFixed(1)}%`);
+
+  // Summary
+  const rows = SUMMARY[league].map(([k, label, f, rankKey]) => {
+    const v = me.v[k];
+    if (v == null) return null;
+    const val = f === 'odds' ? showOdds(v) : fmt(v, f);
+    return h('div', { class: 'info-row' }, h('span', { class: 'k' }, label),
+      h('span', { class: 'v num' }, h('strong', { class: 'stat-val' }, val), rankKey && me.v[rankKey] ? h('span', { class: 'stat-rank' }, `#${me.v[rankKey]}`) : null));
+  }).filter(Boolean);
+  out.push(h('div', { class: 'group-label' }, `${data.final ? `Final ${data.season}` : `Through ${data.asOf}`}`), h('div', { class: 'card' }, rows));
+
+  // Rating history
+  if (me.hist?.length > 1 && window.Chart) {
+    const canvas = h('canvas', { role: 'img', 'aria-label': `${HIST_NAMES[data.histKeys[0]]} by week` });
+    out.push(h('div', { class: 'group-label' }, `${HIST_NAMES[data.histKeys[0]] || 'Rating'} over the season`), h('div', { class: 'card card-pad' }, h('div', { class: 'rating-chart' }, canvas)));
+    requestAnimationFrame(() => historyChart(canvas, data, me, league));
+  }
+
+  // Fingerprint
+  const fpDefs = defs.filter((d) => d.fp && me.v[d.key] != null);
+  if (fpDefs.length) {
+    out.push(h('div', { class: 'group-label' }, 'Percentile fingerprint'),
+      h('div', { class: 'card fingerprint' }, fpDefs.map((d) => {
+        const p = percentiles(data.teams, d).get(me.id);
+        return percentileRow({ label: d.label, pct: p?.pct, value: fmt(me.v[d.key], d.fmt), rank: p?.rank, n: p?.n });
+      })),
+      h('p', { class: 'footnote' }, `League percentile on key stats: 100 is best in ${SCOPE[league]}, 50 is the median. Lower-is-better stats (like EPA allowed) are flipped so longer bars are always better.`));
+  }
+
+  // Everything, grouped
+  const groups = [...new Set(defs.map((d) => d.group))];
+  for (const gname of groups) {
+    const items = defs.filter((d) => d.group === gname && me.v[d.key] != null && !d.fp);
+    if (!items.length) continue;
+    out.push(h('div', { class: 'group-label' }, gname), h('div', { class: 'card' }, items.map((d) => {
+      const p = d.hib == null ? null : percentiles(data.teams, d).get(me.id);
+      return h('div', { class: 'info-row' }, h('span', { class: 'k' }, d.label),
+        h('span', { class: 'v num' }, h('strong', { class: 'stat-val' }, fmt(me.v[d.key], d.fmt)), p ? h('span', { class: 'stat-rank' }, ordinal(p.rank)) : null));
+    })));
+  }
+
+  if (league === 'mlb' && me.months?.length) {
+    out.push(h('div', { class: 'group-label' }, 'Record by month'), h('div', { class: 'card' }, me.months.map(([m, rec]) =>
+      h('div', { class: 'info-row' }, h('span', { class: 'k' }, m), h('span', { class: 'v num' }, h('strong', { class: 'stat-val' }, rec))))));
+  }
+  out.push(h('p', { class: 'footnote' }, `Ranks are among all ${data.teams.length} teams. Definitions and formulas are in the `, h('a', { href: '#/glossary' }, 'Glossary'), '.'));
+  return out;
+}
+
+function historyChart(canvas, data, me, league) {
+  if (!canvas.isConnected) return;
+  const css = getComputedStyle(document.documentElement);
+  const v = (n) => css.getPropertyValue(n).trim();
+  const idx = 0;
+  const values = me.hist.map((p) => p[idx]);
+  const isPct = data.histKeys[idx] === 'pyth_pct';
+  const chart = new window.Chart(canvas, {
+    type: 'line',
+    data: { labels: data.histLabels.slice(-values.length), datasets: [{ data: values, borderColor: v('--podium'), borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: v('--podium'), tension: 0, spanGaps: true }] },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { grid: { display: false }, border: { color: v('--line') }, ticks: { color: v('--ink-muted'), font: { family: 'Inter', size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } },
+        y: { grid: { color: v('--line') }, border: { display: false }, ticks: { color: v('--ink-muted'), font: { family: 'Inter', size: 11 }, maxTicksLimit: 5, callback: (x) => (isPct ? x.toFixed(3).replace(/^0/, '') : x) } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: v('--surface'), borderColor: v('--line'), borderWidth: 1, titleColor: v('--ink-muted'), bodyColor: v('--ink'), displayColors: false, padding: 8, cornerRadius: 4,
+          titleFont: { family: 'Inter', size: 11 }, bodyFont: { family: 'Space Grotesk', size: 13, weight: '700' },
+          callbacks: { label: (it) => `${HIST_NAMES[data.histKeys[idx]]} ${isPct ? Number(it.raw).toFixed(3).replace(/^0/, '') : it.raw}` } },
+      },
+    },
+  });
+  const stop = new MutationObserver(() => { if (!canvas.isConnected) { chart.destroy(); stop.disconnect(); } });
+  stop.observe(document.getElementById('view'), { childList: true, subtree: true });
 }

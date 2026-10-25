@@ -705,3 +705,48 @@ table.stats td.team { max-width: 170px; }
 table.stats td.team > span { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
 table.stats td.team .st-team { display: flex; align-items: center; gap: var(--space-2); max-width: 168px; }
 table.stats td.team .st-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Sparklines ---------- */
+.spark { display: block; }
+.spark-line { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark-dot { fill: var(--ink); }
+
+/* ---------- Ratings table ---------- */
+.ratings-table table.stats th, .ratings-table table.stats td { padding: var(--space-2) var(--space-2); }
+.ratings-table table.stats th { cursor: pointer; user-select: none; }
+.ratings-table table.stats th.sorted { color: var(--ink); }
+.ratings-table table.stats th.sorted::after { content: " \2193"; }
+.ratings-table table.stats th.sorted.asc::after { content: " \2191"; }
+.ratings-table td.team .st-team { max-width: 150px; }
+.ratings-table tr { cursor: pointer; }
+.ratings-table td.up { color: var(--win); }
+.ratings-table td.down { color: var(--ink-muted); }
+.ratings-meta { margin: calc(-1 * var(--space-2)) var(--gutter) var(--space-3); }
+
+/* ---------- Matchup predictor ---------- */
+.matchup { padding: var(--space-4); display: grid; gap: var(--space-3); }
+.matchup .mu-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
+.matchup select.mu-venue { padding: 0 var(--space-1); text-align: center; }
+.matchup select {
+  width: 100%; min-width: 0; height: var(--control-md); padding: 0 var(--space-2);
+  background: var(--surface-sunken); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  font: 600 14px/20px var(--font-sans);
+}
+.matchup .mu-at { font: 700 12px/16px var(--font-display); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 1.5px; }
+.matchup .mu-result { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.matchup .mu-line { font: 700 20px/26px var(--font-display); font-variant-numeric: tabular-nums; }
+.matchup .mu-prob { font: 600 14px/20px var(--font-sans); color: var(--ink-muted); }
+
+/* ---------- Fingerprint ---------- */
+.fingerprint { padding: var(--space-4); display: grid; gap: var(--space-4); }
+.pctl-top { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-1); }
+.pctl-label { font: 600 14px/20px var(--font-sans); }
+.pctl-val { font: 700 14px/20px var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pctl-rank { margin-left: var(--space-2); font: 500 12px/16px var(--font-sans); color: var(--ink-muted); }
+.pctl-track { position: relative; height: 18px; background: var(--surface-sunken); border-radius: var(--radius-none); }
+.pctl-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--line-strong); }
+.pctl-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--ink-muted); }
+.pctl-num { position: absolute; right: var(--space-2); top: 0; font: 700 12px/18px var(--font-display); font-variant-numeric: tabular-nums; color: var(--ink); }
+.rating-chart { position: relative; height: 170px; }
+.dyk { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-4); color: var(--ink); }
+.dyk-text { font: 400 15px/22px var(--font-sans); }

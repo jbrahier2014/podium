@@ -457,7 +457,9 @@ export async function getStandings(league, { force = false } = {}) {
     const parts = conf.children?.length ? conf.children.map((d) => ({ name: d.name, entries: d.standings?.entries || [] })) : [{ name: conf.name, entries: conf.standings?.entries || [] }];
     for (const part of parts) {
       const rows = part.entries.map(toRow);
-      groups.push({ name: part.name, conference: conf.name, columns: cols, rows: rows.map((r, i) => ({ ...r, rank: i + 1 })) });
+      // Independents have no conference record
+      const columns = /Independent/i.test(conf.name) ? cols.filter((c) => c.key !== 'conf') : cols;
+      groups.push({ name: part.name, conference: conf.name, columns, rows: rows.map((r, i) => ({ ...r, rank: i + 1 })) });
     }
   }
   return { views: { conference: { label: 'Conference', groups } }, records };
