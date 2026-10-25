@@ -18,6 +18,10 @@ export function etDay(d) { return dayFmt.format(new Date(d)).replace(',', ''); }
 /** "Sunday 25 October" */
 export function etLongDay(d) { return longDayFmt.format(new Date(d)).replace(',', ''); }
 
+/** "Sunday, October 25, 2026" (Eastern), for Home's date line. */
+const fullDateFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+export function etFullDate(d = new Date()) { return fullDateFmt.format(new Date(d)); }
+
 /** "YYYY-MM-DD" for the Eastern calendar date of a moment. */
 export function etISODate(d = new Date()) {
   const p = Object.fromEntries(partsFmt.formatToParts(new Date(d)).map((x) => [x.type, x.value]));

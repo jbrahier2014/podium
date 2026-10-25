@@ -4,7 +4,7 @@
 // While any of today's games is live, everything refreshes on the Settings interval.
 
 import { h, clear } from '../util/dom.js';
-import { etLongDay } from '../util/time.js';
+import { etFullDate } from '../util/time.js';
 import { settings } from '../store/settings.js';
 import { LEAGUES, inSeason } from '../leagues.js';
 import { getTeamSchedule, getTodayGames, getTeams, getRatings, sortGames, needsLiveUpdates } from '../data/index.js';
@@ -35,7 +35,7 @@ export default {
       getRatings(l).then((d) => { ratings[l] = d; }).catch(() => {})));
 
     ctx.el.append(
-      ...pageTitle('Home', etLongDay(new Date())),
+      ...pageTitle('Home', etFullDate()),
       ...[installTip()].filter(Boolean),
       teams.length
         ? h('div', { class: 'featured-scroller' }, cards.map((c) => c.el))
@@ -124,9 +124,12 @@ function drawCard(el, team, sched, todays, cfbIdx, power) {
     h('div', { class: 'tc-stats' },
       stat('Record', sched?.record || '–'),
       team.league === 'cfb' ? stat('AP rank', sched ? (rank ? `#${rank}` : 'NR') : '–') : null,
-      stat('Power rank', power ? `#${power}` : '–')),
+      stat(RANK_LABEL[team.league], power ? `#${power}` : '–')),
   );
 }
+
+// Which rating the Home card ranks on (see powerRank below)
+const RANK_LABEL = { cfb: 'Predictor rank', nfl: 'SRS rank', mlb: 'Pythag rank' };
 
 const stat = (k, v) => h('div', { class: 'tc-stat' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
 
