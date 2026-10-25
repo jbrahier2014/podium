@@ -35,7 +35,7 @@ Write-Host 'Uploaded. Waiting for GitHub Pages to rebuild...'
 $built = $false
 for ($i = 0; $i -lt 40; $i++) {
   Start-Sleep -Seconds 6
-  $status = (gh api "repos/$repo/pages/builds/latest" --jq .status 2>$null)
+  $status = (cmd /c "gh api repos/$repo/pages/builds/latest --jq .status 2>nul")
   if ($status -eq 'built') { $built = $true; break }
   if ($status -eq 'errored') { break }
   Write-Host '.' -NoNewline

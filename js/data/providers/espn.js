@@ -26,7 +26,15 @@ function normalizeTeam(league, t) {
   };
 }
 
+// ESPN's team-list endpoints block browser (CORS) requests, so the GitHub Action
+// saves them to data/teams/<league>.json on this site (see scripts/fetch-teams.mjs).
+// The direct ESPN request stays as a fallback in case that ever changes.
 export async function getTeams(league) {
+  try {
+    const { data, stale, savedAt } = await cachedJSON(`data/teams/${league}.json`, { ttlMs: DAY });
+    if (data?.teams?.length) return { teams: data.teams, stale, savedAt };
+  } catch { /* not generated yet: fall through */ }
+
   const url = league === 'cfb'
     ? `${BASE}/${PATH.cfb}/teams?groups=80&limit=1000` // groups=80 → FBS only
     : `${BASE}/${PATH.nfl}/teams?limit=100`;

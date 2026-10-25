@@ -13,6 +13,8 @@ const CHECKS = [
     read: (j) => `${j.events?.length ?? 0} FBS games this week` },
   { name: 'MLB Stats API · schedule', url: () => `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${etISODate()}`,
     read: (j) => `${j.totalGames ?? 0} games today` },
+  { name: 'Team lists (this site)', url: () => 'data/teams/cfb.json',
+    read: (j) => `${j.teams?.length ?? 0} FBS teams saved by the GitHub Action` },
   { name: 'Nightly stats (this site)', url: () => 'data/meta.json',
     read: (j) => (j.generatedAt ? `Last run ${new Date(j.generatedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} ET` : 'Not generated yet') },
 ];

@@ -65,7 +65,7 @@ Ok ((gh --version) | Select-Object -First 1)
 
 # ---------------------------------------------------------------- 2. Sign in
 Step 2 'Signing in to GitHub'
-gh auth status --hostname github.com *> $null
+cmd /c "gh auth status --hostname github.com >nul 2>&1"
 if ($LASTEXITCODE -ne 0) {
   Write-Host ''
   Write-Host '      >>> BROWSER STEP <<<' -ForegroundColor Yellow
@@ -100,7 +100,7 @@ if ($LASTEXITCODE -ne 0) {
   if (Test-Path $msgFile) { git commit -q -F $msgFile; Remove-Item $msgFile } else { git commit -q -m 'Initial app shell' }
 }
 
-gh repo view "$login/$Repo" *> $null
+cmd /c "gh repo view $login/$Repo >nul 2>&1"
 if ($LASTEXITCODE -ne 0) {
   gh repo create $Repo --public --source . --remote origin --description 'Podium: personal sports stats app (PWA)'
   if ($LASTEXITCODE -ne 0) { Fail 'Could not create the repository.' }
@@ -129,7 +129,7 @@ Info 'Waiting for the first build (usually 1-2 minutes)...'
 $built = $false
 for ($i = 0; $i -lt 40; $i++) {
   Start-Sleep -Seconds 6
-  $status = (gh api "repos/$login/$Repo/pages/builds/latest" --jq .status 2>$null)
+  $status = (cmd /c "gh api repos/$login/$Repo/pages/builds/latest --jq .status 2>nul")
   if ($status -eq 'built') { $built = $true; break }
   if ($status -eq 'errored') { break }
   Write-Host '.' -NoNewline

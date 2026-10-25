@@ -35,7 +35,9 @@ js/data/index.js        The ONE place screens get data from
 js/data/providers/      ESPN (NFL, CFB) and MLB Stats API adapters — swap these if a source changes
 js/data/glossary.js     Every stat's definition and formula
 js/views/               One file per screen
-data/                   JSON written by the nightly GitHub Action (advanced stats, ratings)
+data/                   JSON written by the GitHub Actions (team lists, advanced stats, ratings)
+scripts/                Scripts the GitHub Actions run (never loaded by the app)
+.github/workflows/      The scheduled GitHub Actions
 tools/make_icons.py     Regenerates the app icon and launch screens
 design/                 The Podium design system docs (principles, logo, voice, tokens)
 assets/fonts/           Space Grotesk and Inter, self-hosted so the app works offline
