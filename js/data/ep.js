@@ -21,14 +21,20 @@ export async function loadEP(league) {
   if (league !== 'nfl' && league !== 'cfb') return null;
   if (cache.has(league)) return cache.get(league);
   const p = (async () => {
-    const get = (lg) => getComputed(`ep/${lg}.json`, { ttlMs: DAY }).then((r) => r?.data || r).catch(() => null);
+    const fits = (x) => x?.coef && x.knots && x.coef.length === basis(x, 50, 1, 10, 900, 0).length;
+    // A cached copy from before a model update is refetched straight away
+    const get = async (lg) => {
+      const load = (force) => getComputed(`ep/${lg}.json`, { ttlMs: DAY, force }).then((r) => r?.data || r).catch(() => null);
+      const x = await load(false);
+      return x && !fits(x) ? load(true) : x;
+    };
     let m = await get(league);
     if (!m?.coef && league === 'cfb') {
       const nfl = await get('nfl');
       if (nfl?.coef) m = { ...nfl, league: 'cfb', borrowed: true, fg: [4.7, -0.09], conv: [0.7, -0.7], punt: null, punt_net: 38, fg_miss: 'line_of_scrimmage' };
     }
     // A model fitted for a different basis (e.g. mid-update) is ignored rather than misread
-    return m?.coef && m.knots && m.coef.length === basis(m, 50, 1, 10, 900, 0).length ? m : null;
+    return fits(m) ? m : null;
   })();
   cache.set(league, p);
   return p;

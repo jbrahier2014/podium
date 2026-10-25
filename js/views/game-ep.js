@@ -42,7 +42,15 @@ function liveState(d) {
     if (e && e.down >= 1 && e.down <= 4 && e.ytg >= 1 && e.ytg <= 99 && e.team) {
       return { offense: e.team, down: e.down, dist: e.distance || 10, ytg: e.ytg, period: p.period, clockSecs: Math.max(0, p.clockSecs - 5), text: e.text };
     }
-    return null; // kickoff, score or try in progress
+    // Between a score and the kickoff: show the receiving team's next drive from a
+    // typical start (NFL kickoffs now usually end near the 30; college touchbacks at the 25)
+    if (p.scoring || /field goal|touchdown|extra point|two-point|safety/i.test(p.type)) {
+      const scorer = /safety/i.test(p.type) ? null : p.offense;
+      const receiver = scorer ? (scorer === g.home.team.id ? g.away.team.id : g.home.team.id) : p.offense;
+      if (!receiver) return null;
+      return { offense: receiver, down: 1, dist: 10, ytg: g.league === 'nfl' ? 70 : 75, period: p.period, clockSecs: Math.max(0, p.clockSecs - 5), next: true };
+    }
+    return null;
   }
   return null;
 }
@@ -90,7 +98,8 @@ export function epSection(d, model, state) {
       h('div', { class: 'ep-who' }, crest(off, 'sm'),
         h('div', {},
           h('div', { class: 'ep-dd' }, `${off.abbr} ball · ${ddText}`, h('span', { class: 'muted' }, ` at ${spotText(s.ytg)}`)),
-          h('div', { class: 't-caption' }, whatIf ? (live ? 'What-if · same clock and score' : 'What-if · neutral clock and score') : 'Live'))),
+          h('div', { class: 't-caption' }, state.whatIf ? (live ? 'What-if · same clock and score' : 'What-if · neutral clock and score')
+            : live?.next ? 'Next drive · after the kickoff, from a typical start' : live ? 'Live' : 'What-if · neutral clock and score'))),
       h('div', { class: 'ep-big' }, h('span', { class: 'v' }, fmtEP(ep)), h('span', { class: 'k' }, 'expected points')));
 
     const downChips = h('div', { class: 'ep-downs', role: 'group', 'aria-label': 'Down' },

@@ -143,8 +143,8 @@ export function needsLiveUpdates(games) {
 }
 
 /** JSON files produced by the scheduled GitHub Action (relative to the site). */
-export function getComputed(path, { ttlMs = 30 * 60_000, final = false } = {}) {
-  return track('computed', cachedJSON(`data/${path}`, { ttlMs, final }));
+export function getComputed(path, { ttlMs = 30 * 60_000, final = false, force = false } = {}) {
+  return track('computed', cachedJSON(`data/${path}`, { ttlMs, final, force }));
 }
 
 /** When the nightly job last ran and which seasons exist. */
