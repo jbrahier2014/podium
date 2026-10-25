@@ -272,7 +272,7 @@ function advancedContent(league, id, team, data) {
         const p = percentiles(data.teams, d).get(me.id);
         return percentileRow({ label: d.label, pct: p?.pct, value: fmt(me.v[d.key], d.fmt), rank: p?.rank, n: p?.n });
       })),
-      h('p', { class: 'footnote' }, `League percentile on key stats: 100 is best in ${SCOPE[league]}, 50 is the median. Lower-is-better stats (like EPA allowed) are flipped so longer bars are always better.`));
+      h('p', { class: 'footnote' }, `League percentile on key stats: 100 is best in ${SCOPE[league]}, 50 is the median. Lower-is-better stats (like ${league === 'mlb' ? 'ERA' : 'EPA allowed'}) are flipped so longer bars are always better.`));
   }
 
   // Everything, grouped

@@ -17,6 +17,7 @@ const ROUTES = [
   ['ratings', () => import('./views/ratings.js')],
   ['ratings/:league', () => import('./views/ratings.js')],
   ['explore', () => import('./views/explore.js')],
+  ['explore/:league', () => import('./views/explore.js')],
   ['more', () => import('./views/more.js')],
   ['glossary', () => import('./views/glossary.js')],
   ['settings', () => import('./views/settings.js')],
