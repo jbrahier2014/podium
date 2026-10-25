@@ -14,7 +14,7 @@ Method
 
   Fit: ridge least squares on a fixed basis (see basis() below; app/js/data/ep.js
   mirrors it exactly): a piecewise-linear curve over yards to goal for each down,
-  log distance and goal-to-go per down, end-of-half terms and score difference.
+  log and straight-line distance and goal-to-go per down, end-of-half terms and score difference.
   About 80 coefficients; the job reports R² and mean absolute error against the
   source model on held-out plays.
 
@@ -37,7 +37,7 @@ import pandas as pd
 
 from common import DATA, http_get, now_iso, r, read_json, season_year, write_json
 
-BASIS = "podium-ep-v1"
+BASIS = "podium-ep-v2"
 KNOTS = [1, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 99]
 
 CFB_URL = "https://github.com/sportsdataverse/sportsdataverse-data/releases/download/espn_cfb_model_pbp/model_pbp_{season}.parquet"
@@ -78,7 +78,8 @@ def basis(ytg, down, dist, secs, sd):
     for d in (1, 2, 3, 4):
         m = (down == d).astype(float)
         cols.append(hat * m[:, None])
-        cols.append(np.stack([ld * m, ld * u * m, goal * m], axis=1))
+        dl = dist / 10.0
+        cols.append(np.stack([ld * m, ld * u * m, goal * m, dl * m, dl * u * m], axis=1))
     cols.append(np.stack([late, late * u, late * u * u, vlate, vlate * u, t, t * u, sd, sd * late, sd * t], axis=1))
     return np.hstack(cols)
 

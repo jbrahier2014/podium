@@ -27,7 +27,8 @@ export async function loadEP(league) {
       const nfl = await get('nfl');
       if (nfl?.coef) m = { ...nfl, league: 'cfb', borrowed: true, fg: [4.7, -0.09], conv: [0.7, -0.7], punt: null, punt_net: 38, fg_miss: 'line_of_scrimmage' };
     }
-    return m?.coef ? m : null;
+    // A model fitted for a different basis (e.g. mid-update) is ignored rather than misread
+    return m?.coef && m.knots && m.coef.length === basis(m, 50, 1, 10, 900, 0).length ? m : null;
   })();
   cache.set(league, p);
   return p;
@@ -53,7 +54,7 @@ function basis(m, ytg, down, dist, secs, sd) {
   for (let d = 1; d <= 4; d++) {
     const on = down === d ? 1 : 0;
     for (let i = 0; i < k.length; i++) x.push(on * (i === j ? 1 - w : i === j + 1 ? w : 0));
-    x.push(ld * on, ld * u * on, goal * on);
+    x.push(ld * on, ld * u * on, goal * on, (dist / 10) * on, (dist / 10) * u * on);
   }
   x.push(late, late * u, late * u * u, vlate, vlate * u, t, t * u, sd, sd * late, sd * t);
   return x;

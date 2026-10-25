@@ -845,3 +845,4 @@ table.stats td.team .st-name { min-width: 0; overflow: hidden; text-overflow: el
 .big-play .grow { flex: 1; min-width: 0; }
 .big-play .bp-text { font: 400 14px/20px var(--font-sans); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .big-play .epa-chip { margin-top: 2px; font-size: 14px; }
+@media (max-width: 400px) { .tabs { gap: var(--space-4); } }
