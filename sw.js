@@ -6,7 +6,7 @@
 // - Team logos (ESPN / MLB image hosts): cache first — they almost never change.
 // - Live data APIs: not touched here; js/store/cache.js handles those in IndexedDB.
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL = `podium-shell-${VERSION}`;
 const IMAGES = 'podium-images-v1';
 
@@ -79,7 +79,7 @@ function networkFirst(request, timeoutMs = 2500) {
       if (cached && !settled) { settled = true; resolve(cached); }
     }, timeoutMs);
 
-    fetch(request).then((res) => {
+    fetch(new Request(request, { cache: 'no-cache' })).then((res) => {
       clearTimeout(timer);
       if (res.ok) {
         const copy = res.clone();
