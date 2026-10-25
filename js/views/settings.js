@@ -53,6 +53,11 @@ function build() {
       (v) => settings.set({ refreshSeconds: v }), { label: 'Refresh interval' }),
     h('p', { class: 'footnote' }, 'While a game is live. Nothing refreshes when no games are on.'),
 
+    h('div', { class: 'group-label' }, 'Team marks'),
+    choice([{ id: true, label: 'Logos' }, { id: false, label: 'Color crests' }], s.logos !== false,
+      (v) => settings.set({ logos: v }), { label: 'Team marks' }),
+    h('p', { class: 'footnote' }, 'Logos load from ESPN and MLB. Crests are Podium\u2019s team-color squares and work offline.'),
+
     h('div', { class: 'group-label' }, 'Theme'),
     choice([{ id: 'dark', label: 'Arena' }, { id: 'light', label: 'Daylight' }, { id: 'system', label: 'Automatic' }], s.theme,
       (v) => settings.set({ theme: v }), { label: 'Theme' }),

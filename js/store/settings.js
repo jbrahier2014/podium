@@ -15,6 +15,7 @@ export const DEFAULT_FEATURED = [
 const DEFAULTS = {
   featured: DEFAULT_FEATURED,
   refreshSeconds: 30,  // live-score polling interval while games are in progress
+  logos: true,        // real team logos (false = Podium color crests)
   theme: 'dark',       // 'dark' (Arena, the default) | 'light' (Daylight) | 'system'
 };
 

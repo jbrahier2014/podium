@@ -101,7 +101,7 @@ export default {
     const featured = new Set(settings.get().featured.filter((t) => t.league === league).map((t) => t.id));
     const teams = data.teams.map((t) => {
       const info = teamInfo.get(t.id) || {};
-      return { ...t, info: { ...info, id: t.id, league, abbr: info.abbr || t.abbr || '?', short: info.short || t.name || t.abbr, name: info.name || t.name, color: info.color || null } };
+      return { ...t, info: { ...info, id: t.id, league, abbr: info.abbr || t.abbr || '?', short: info.short || t.name || t.abbr, name: info.name || t.name, color: info.color || null, logo: info.logo || null } };
     });
 
     clear(body);

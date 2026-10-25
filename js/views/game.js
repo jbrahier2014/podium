@@ -10,11 +10,14 @@ import { etDay, etTime } from '../util/time.js';
 import { livePoller } from '../util/poller.js';
 import { crest, badge, tabs, chips, statBar, emptyState } from '../ui/components.js';
 import { footText } from '../ui/format.js';
+import { loadEP } from '../data/ep.js';
+import { epSection, drawEPA, epaById, epaChip } from './game-ep.js';
 
 const TABS = [
   { id: 'summary', label: 'Summary' },
   { id: 'box', label: 'Box score' },
   { id: 'plays', label: 'Plays' },
+  { id: 'epa', label: 'EPA', football: true },
   { id: 'stats', label: 'Team stats' },
 ];
 
@@ -26,8 +29,11 @@ export default {
 
     const hero = h('div', { class: 'game-hero' }, h('div', { class: 'skeleton', style: { height: '150px' } }));
     const body = h('div');
-    const state = { tab: ctx.query.tab && TABS.some((t) => t.id === ctx.query.tab) ? ctx.query.tab : 'summary', boxSide: 'away', open: new Set() };
-    const tabBar = tabs(TABS, state.tab, (t) => { state.tab = t; drawBody(); }, { label: 'Game sections' });
+    const football = league !== 'mlb';
+    const tabList = TABS.filter((t) => !t.football || football);
+    const state = { tab: ctx.query.tab && tabList.some((t) => t.id === ctx.query.tab) ? ctx.query.tab : 'summary', boxSide: 'away', open: new Set(), whatIf: null };
+    const modelLoad = football ? loadEP(league).catch(() => null) : Promise.resolve(null);
+    const tabBar = tabs(tabList, state.tab, (t) => { state.tab = t; drawBody(); }, { label: 'Game sections' });
     ctx.el.append(hero, tabBar, body);
 
     let detail;
@@ -38,6 +44,7 @@ export default {
       body.append(h('div', { class: 'notice strong' }, `Couldn’t load this game: ${err.message}`));
       return;
     }
+    const model = await modelLoad;
     if (!ctx.isCurrent()) return;
 
     const g0 = detail.game;
@@ -53,9 +60,10 @@ export default {
       chart?.destroy(); chart = null;
       clear(body);
       const d = detail;
-      if (state.tab === 'summary') chart = drawSummary(body, d);
+      if (state.tab === 'summary') chart = drawSummary(body, d, model, state);
       else if (state.tab === 'box') drawBox(body, d, state, drawBody);
-      else if (state.tab === 'plays') drawPlays(body, d, state);
+      else if (state.tab === 'plays') drawPlays(body, d, state, model);
+      else if (state.tab === 'epa') chart = drawEPA(body, d, model);
       else drawStats(body, d);
     }
     drawAll();
@@ -106,10 +114,11 @@ function drawHero(el, d) {
 }
 
 // ---------------------------------------------------------------- summary
-function drawSummary(el, d) {
+function drawSummary(el, d, model, state) {
   const g = d.game;
   let chart = null;
   if (d.linescore) el.append(lineScore(d));
+  if (g.league !== 'mlb' && g.status.state !== 'pre') el.append(epSection(d, model, state));
 
   if (d.winProb?.length > 1) {
     const r = winProbCard(d);
@@ -249,8 +258,9 @@ function drawBox(el, d, state, redraw) {
 }
 
 // ---------------------------------------------------------------- plays
-function drawPlays(el, d, state) {
+function drawPlays(el, d, state, model) {
   const g = d.game;
+  const epa = g.league !== 'mlb' ? epaById(d, model) : new Map();
   if (!d.plays?.length) { el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No plays yet', text: 'Play-by-play fills in once the game starts.' }))); return; }
   el.append(h('div', { class: 'card' }, d.plays.map((grp, i) => {
     const key = `${grp.title}-${grp.sub}-${d.plays.length - i}`;
@@ -260,7 +270,7 @@ function drawPlays(el, d, state) {
         h('span', { class: 'grow' }, h('div', { class: 'title' }, grp.title, grp.scoring ? h('span', { class: 'badge strong', style: { marginLeft: 'var(--space-2)' } }, 'Score') : null), grp.sub ? h('div', { class: 'sub' }, grp.sub) : null),
         icon(ICONS.chevron)),
       h('div', { class: 'pg-body' }, grp.items.map((p) => h('div', { class: `play-item${p.scoring ? ' scoring' : ''}` },
-        p.meta ? h('div', { class: 'meta' }, p.meta) : null, h('div', { class: 'txt' }, p.text)))));
+        p.meta || epa.has(p.id) ? h('div', { class: 'meta' }, h('span', {}, p.meta), epaChip(epa.get(p.id)?.epa)) : null, h('div', { class: 'txt' }, p.text)))));
     det.addEventListener('toggle', () => { if (det.open) state.open.add(key); else state.open.delete(key); });
     return det;
   })));

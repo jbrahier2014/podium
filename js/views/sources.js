@@ -60,6 +60,14 @@ export default {
             h('div', { class: 'sub' }, problems.length ? problems.join(' \u00b7 ') : `Through ${m.asOf || '\u2013'} \u00b7 seasons ${(m.seasons || []).join(', ')}`)),
           problems.length ? badge('Problem', 'strong') : badge('OK', 'win')));
       }
+      for (const [lg, name] of [['nfl', 'Expected points model, NFL (nflverse)'], ['cfb', 'Expected points model, college (cfbfastR)']]) {
+        const e = meta.ep?.[lg];
+        if (!e) continue;
+        rows.push(h('div', { class: 'list-item' },
+          h('span', { class: 'grow' }, h('div', { class: 'title' }, name),
+            h('div', { class: 'sub' }, e.ok ? `Fitted ${String(e.fitted || '').slice(0, 10)} \u00b7 R\u00b2 ${e.r2 ?? '\u2013'} \u00b7 off by ${e.mae ?? '\u2013'} points on average` : `${e.error || 'Not fitted'}`.slice(0, 300))),
+          e.ok ? badge('OK', 'win') : badge('Problem', 'strong')));
+      }
       if (rows.length) job.append(h('div', { class: 'group-label' }, 'Nightly job sources'), h('div', { class: 'list' }, rows));
     }).catch(() => {});
     ctx.el.append(

@@ -6,7 +6,7 @@
 // - Team logos (ESPN / MLB image hosts): cache first — they almost never change.
 // - Live data APIs: not touched here; js/store/cache.js handles those in IndexedDB.
 
-const VERSION = 'v8';
+const VERSION = 'v9';
 const SHELL = `podium-shell-${VERSION}`;
 const IMAGES = 'podium-images-v1';
 
@@ -45,6 +45,8 @@ const PRECACHE = [
   'js/views/scores.js',
   'js/views/ratings.js',
   'js/views/explore.js',
+  'js/views/game-ep.js',
+  'js/data/ep.js',
   'js/views/more.js',
   'js/views/glossary.js',
   'js/views/settings.js',

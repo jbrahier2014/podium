@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import cfb  # noqa: E402
+import ep  # noqa: E402
 import mlb  # noqa: E402
 import nfl  # noqa: E402
 from common import DATA, in_season, now_iso, read_json, season_file, season_year, write_json  # noqa: E402
@@ -37,6 +38,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--leagues", default="cfb,nfl,mlb")
     ap.add_argument("--full", action="store_true", help="refresh everything (nightly run)")
+    ap.add_argument("--ep-only", action="store_true", help="only refit the expected-points models")
     args = ap.parse_args()
     full = args.full or os.environ.get("FULL_RUN") == "1"
     weekday_utc = datetime.now(timezone.utc).weekday()  # Mon=0 .. Sun=6
@@ -44,6 +46,11 @@ def main():
     meta = read_json(DATA / "meta.json", {}) or {}
     meta.setdefault("leagues", {})
     run_leagues = []
+    if args.ep_only:
+        meta["ep"] = ep.update(log, force=True)
+        write_json(DATA / "meta.json", meta)
+        return
+
     for lg in args.leagues.split(","):
         cur = season_year(lg)
         have_current = season_file(lg, cur).exists()
@@ -90,6 +97,13 @@ def main():
             "seconds": round(time.time() - t0, 1),
         })
         meta["leagues"][lg] = entry
+
+    # Expected-points models for live games (weekly, on full runs)
+    if full:
+        try:
+            meta["ep"] = ep.update(log)
+        except Exception as e:
+            log(f"ep ERROR {e}")
 
     meta["generatedAt"] = now_iso()
     meta["fullRun"] = full

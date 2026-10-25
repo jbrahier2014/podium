@@ -2,6 +2,7 @@
 // rebuilt without a framework so the app stays a no-build static site).
 // Each returns a DOM element styled by css/app.css.
 
+import { settings, resolvedTheme } from '../store/settings.js';
 import { h, icon, ICONS } from '../util/dom.js';
 
 // ---------------------------------------------------------------- color helpers
@@ -25,14 +26,43 @@ export function inkFor(color) {
 }
 
 // ---------------------------------------------------------------- TeamCrest
-/** Team color square with the short name. size: '' | 'sm' | 'lg' */
+/**
+ * The team's real logo (Settings → Team marks → Logos, the default), or the Podium
+ * crest: a team-color square with the short name. If a logo can't load (offline,
+ * missing), the crest takes its place. size: '' | 'sm' | 'lg'
+ */
 export function crest(team, size = '') {
+  const src = settings.get().logos !== false ? logoSrc(team.logo, resolvedTheme(), size) : null;
+  if (!src) return plainCrest(team, size);
+  const box = h('span', { class: `crest logo ${size}`.trim(), 'aria-hidden': 'true' });
+  const img = h('img', { src, alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' });
+  img.addEventListener('error', () => box.replaceWith(plainCrest(team, size)), { once: true });
+  box.append(img);
+  return box;
+}
+
+function plainCrest(team, size) {
   const color = team.color || null;
   return h('span', {
     class: `crest ${size}`.trim(),
     style: { '--team': color, '--team-ink': team.ink || inkFor(color) },
     'aria-hidden': 'true',
   }, (team.abbr || team.short || '?').slice(0, 4));
+}
+
+/**
+ * Logo URL for the theme and size. ESPN logos have a dark-background variant and
+ * are resized by ESPN's image service (a 500px PNG for a 24px mark is wasteful);
+ * MLB logos are SVG, with cap versions drawn for dark and light backgrounds.
+ */
+export function logoSrc(url, theme = 'dark', size = '') {
+  if (!url) return null;
+  const px = { sm: 48, '': 64, lg: 112 }[size] || 64;
+  const espn = url.match(/^https:\/\/a\.espncdn\.com(\/i\/teamlogos\/[a-z]+)\/500(?:-dark)?\/(.+)$/);
+  if (espn) return `https://a.espncdn.com/combiner/i?img=${espn[1]}/500${theme === 'dark' ? '-dark' : ''}/${espn[2].replace(/^scoreboard\//, '')}&w=${px}&h=${px}`;
+  const mlb = url.match(/^https:\/\/www\.mlbstatic\.com\/team-logos\/(?:team-cap-on-(?:dark|light)\/)?(\d+)\.svg$/);
+  if (mlb) return `https://www.mlbstatic.com/team-logos/team-cap-on-${theme === 'dark' ? 'dark' : 'light'}/${mlb[1]}.svg`;
+  return url;
 }
 
 // ---------------------------------------------------------------- Badge

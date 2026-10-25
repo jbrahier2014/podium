@@ -318,12 +318,27 @@ export async function getGame(league, gameId, { force = false } = {}) {
       sub: d.description || '',
       scoring: !!d.isScore,
       items: (d.plays || []).slice().reverse().map((p) => ({
+        id: String(p.id),
         meta: `${periodLabel(p.period?.number || 1)} ${p.clock?.displayValue || ''}${p.start?.downDistanceText ? ` · ${p.start.downDistanceText}` : ''}`,
         text: p.text,
         scoring: !!p.scoringPlay,
       })),
     };
   });
+
+  // Chronological plays with field position, for expected points (js/data/ep.js)
+  const toSecs = (c) => { const m = String(c?.displayValue || '').match(/(\d+):(\d+)/); return m ? Number(m[1]) * 60 + Number(m[2]) : Number(c?.value) || 0; };
+  const spot = (x) => (x ? { down: x.down, distance: x.distance, ytg: x.yardsToEndzone, team: x.team?.id != null ? String(x.team.id) : null, text: x.downDistanceText || '' } : null);
+  const pbp = [];
+  uniqueDrives.forEach((d) => (d.plays || []).forEach((p) => pbp.push({
+    id: String(p.id), seq: Number(p.sequenceNumber) || 0,
+    period: p.period?.number || 1, clockSecs: toSecs(p.clock), clock: p.clock?.displayValue || '',
+    type: p.type?.text || '', text: p.text || '',
+    offense: String(p.start?.team?.id || d.team?.id || abbrToId.get(d.team?.abbreviation) || ''),
+    start: spot(p.start), end: spot(p.end),
+    homeScore: p.homeScore, awayScore: p.awayScore, scoring: !!p.scoringPlay,
+  })));
+  if (pbp.every((p) => p.seq)) pbp.sort((a, b) => a.seq - b.seq);
 
   // Win probability (home team, 0-100) against game minutes
   const wpRaw = j.winprobability || [];
@@ -382,7 +397,7 @@ export async function getGame(league, gameId, { force = false } = {}) {
     ['Attendance', j.gameInfo?.attendance ? Number(j.gameInfo.attendance).toLocaleString('en-US') : null],
   ].filter(([, v]) => v).map(([label, value]) => ({ label, value }));
 
-  return { game, linescore, scoring, plays, winProb, teamStats, box, info, savedAt, stale, sideOf };
+  return { game, linescore, scoring, plays, pbp, winProb, teamStats, box, info, savedAt, stale, sideOf };
 }
 
 // ---------------------------------------------------------------- standings
