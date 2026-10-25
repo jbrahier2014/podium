@@ -3,15 +3,25 @@
 John's personal sports stats app: scores, box scores, schedules, standings and deep team
 statistics for college football (FBS), MLB and the NFL. No news, articles or video.
 
-It's a Progressive Web App hosted free on GitHub Pages. On iPhone, open the site in Safari,
-tap **Share → Add to Home Screen**, and it runs full-screen like a native app.
+Live at **https://jbrahier2014.github.io/podium/**
+
+## On your iPhone
+
+1. Open https://jbrahier2014.github.io/podium/ in **Safari**.
+2. Tap **Share** (square with an up arrow; on newer iOS it may be behind the **…** button).
+3. Tap **Add to Home Screen** (scroll down the list if needed), keep **Open as Web App** on, tap **Add**.
+4. Open Podium from its icon: full screen, instant start, works offline with the last data
+   it saw, and updates itself after each publish.
+
+The Home Screen app keeps its own settings (featured teams, theme), separate from Safari.
+The app also has these steps under **More → Add to Home Screen**.
 
 ## Everyday use of this folder
 
 | Double-click | What it does |
 |---|---|
 | `1-SETUP.cmd` | One time only: installs Git + GitHub CLI, signs you in, creates the repo, turns on Pages |
-| `2-PUBLISH-UPDATE.cmd` | Uploads whatever has changed in this folder; the site updates a minute later |
+| `2-PUBLISH-UPDATE.cmd` | Uploads whatever has changed in this folder and stamps a new app version; the site and installed apps update a minute later |
 | `add-cfbd-key.cmd` | Saves your CollegeFootballData API key as a GitHub secret (used only by the nightly Action) |
 
 ## How the code is organized
@@ -46,12 +56,12 @@ assets/fonts/           Space Grotesk and Inter, self-hosted so the app works of
 Player stats are planned as a later add-on: they get their own functions in
 `js/data/index.js` and their own screens, without changing the team code.
 
-## Build phases
+## Build phases (all done)
 
-1. GitHub setup, repo, Pages, PWA shell  ← current
+1. GitHub setup, repo, Pages, PWA shell
 2. Live scores for all three leagues
 3. Game detail
 4. Team pages and standings
 5. GitHub Action: advanced stats and power ratings
 6. Stat Explorer
-7. Polish
+7. Live expected points (football), team logos, polish and home-screen app behavior

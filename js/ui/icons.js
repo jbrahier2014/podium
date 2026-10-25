@@ -26,5 +26,7 @@ export const ICONS = {
   scoreboard: svg('<rect x="3" y="5" width="18" height="14"/><path d="M12 5v14"/>'),
   scatter: svg('<path d="M4 4v16h16"/><rect x="7.5" y="13" width="2" height="2"/><rect x="11.5" y="9" width="2" height="2"/><rect x="15.5" y="11" width="2" height="2"/><rect x="17.5" y="5" width="2" height="2"/>'),
   chart: svg('<path d="M3 20v-8h6V6h6v9h6v5z"/>'),
+  share: svg('<path d="M12 3v12M8 7l4-4 4 4M6 11H4v10h16V11h-2"/>'),
+  phone: svg('<rect x="7" y="3" width="10" height="18"/><path d="M11 18h2"/>'),
   bulb: svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z"/>'),
 };

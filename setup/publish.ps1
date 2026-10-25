@@ -11,6 +11,20 @@ $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [En
 function Done($code) { Stop-Transcript | Out-Null; Read-Host 'Press Enter to close'; exit $code }
 
 Write-Host 'Publishing Podium...' -ForegroundColor Cyan
+
+# If any app file changed, give this release a new version number in sw.js, so phones
+# with Podium on the home screen pick it up (the app reloads itself into new versions).
+$appChanges = @(git status --porcelain | ForEach-Object { $_.Substring(3) } | Where-Object { $_ -notmatch '^(data|setup)/' })
+if ($appChanges.Count -gt 0) {
+  $sw = Join-Path $Root 'sw.js'
+  $utf8 = New-Object System.Text.UTF8Encoding $false
+  $text = [System.IO.File]::ReadAllText($sw, $utf8)
+  $stamp = 'v' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+  $text = [regex]::Replace($text, "const VERSION = '[^']*'", "const VERSION = '$stamp'")
+  [System.IO.File]::WriteAllText($sw, $text, $utf8)
+  Write-Host "App version $stamp"
+}
+
 git add -A
 git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) {

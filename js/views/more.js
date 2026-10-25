@@ -2,8 +2,9 @@
 
 import { h } from '../util/dom.js';
 import { pageTitle, listRow } from './common.js';
+import { openInstallHelp, isStandalone } from '../ui/install.js';
 
-export const APP_VERSION = '0.7 · Live expected points';
+export const APP_VERSION = '1.0';
 
 export default {
   async render(ctx) {
@@ -14,6 +15,7 @@ export default {
         listRow({ href: '#/glossary', iconName: 'book', title: 'Glossary', sub: 'Every stat, with its formula' }),
         listRow({ href: '#/settings', iconName: 'settings', title: 'Settings' }),
         listRow({ href: '#/sources', iconName: 'signal', title: 'Data sources', sub: 'Live status check' }),
+        isStandalone() ? null : listRow({ onclick: openInstallHelp, iconName: 'phone', title: 'Add to Home Screen', sub: 'Use Podium like an app' }),
       ),
       h('div', { class: 'group-label' }, 'Elsewhere'),
       h('div', { class: 'list' },

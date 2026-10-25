@@ -13,6 +13,7 @@ import { etISODate } from '../util/time.js';
 import { livePoller } from '../util/poller.js';
 import { crest, badge } from '../ui/components.js';
 import { gameCard, resultLine, nextLine } from '../ui/format.js';
+import { installTip } from '../ui/install.js';
 import { pageTitle, sectionHeader, emptyState } from './common.js';
 
 export default {
@@ -35,6 +36,7 @@ export default {
 
     ctx.el.append(
       ...pageTitle('Home', etLongDay(new Date())),
+      ...[installTip()].filter(Boolean),
       teams.length
         ? h('div', { class: 'featured-scroller' }, cards.map((c) => c.el))
         : h('div', { class: 'notice' }, 'No featured teams yet. ', h('a', { href: '#/settings' }, 'Add teams')),

@@ -47,6 +47,7 @@ const cardSide = (s) => ({
   name: s.team.short || s.team.name,
   abbr: s.team.abbr,
   color: s.team.color,
+  logo: s.team.logo,
   score: s.score,
   record: s.record,
   rank: s.team.rank,

@@ -118,7 +118,8 @@ function drawSummary(el, d, model, state) {
   const g = d.game;
   let chart = null;
   if (d.linescore) el.append(lineScore(d));
-  if (g.league !== 'mlb' && g.status.state !== 'pre') el.append(epSection(d, model, state));
+  // Live: expected points right under the score. Finished: a what-if tool, after the story of the game.
+  if (g.league !== 'mlb' && g.status.state === 'in') el.append(epSection(d, model, state));
 
   if (d.winProb?.length > 1) {
     const r = winProbCard(d);
@@ -135,6 +136,8 @@ function drawSummary(el, d, model, state) {
         h('div', { class: 'sc' }, `${p.away}–${p.home}`));
     })));
   }
+
+  if (g.league !== 'mlb' && g.status.state === 'post') el.append(epSection(d, model, state));
 
   if (g.status.state === 'pre') {
     el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'Not started', text: 'Box score, plays and win probability appear once the game starts.' })));

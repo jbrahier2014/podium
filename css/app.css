@@ -846,3 +846,16 @@ table.stats td.team .st-name { min-width: 0; overflow: hidden; text-overflow: el
 .big-play .bp-text { font: 400 14px/20px var(--font-sans); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .big-play .epa-chip { margin-top: 2px; font-size: 14px; }
 @media (max-width: 400px) { .tabs { gap: var(--space-4); } }
+
+/* ---------- Add to Home Screen ---------- */
+.install-tip { display: flex; align-items: center; gap: var(--space-3); margin: 0 var(--gutter) var(--space-4); padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--podium); }
+.install-tip .it-icon svg { width: 22px; height: 22px; color: var(--podium); display: block; }
+.install-tip .it-text { flex: 1; text-align: left; min-width: 0; color: var(--ink); }
+.install-tip .title { font: 600 14px/20px var(--font-sans); }
+.install-tip .sub { font: 400 13px/18px var(--font-sans); color: var(--ink-muted); }
+.install-tip .it-close { font: 400 22px/1 var(--font-sans); color: var(--ink-muted); }
+.install-steps { margin: 0 var(--gutter); padding: 0; list-style: none; counter-reset: step; }
+.install-steps li { counter-increment: step; position: relative; padding: var(--space-3) 0 var(--space-3) 44px; border-bottom: 1px solid var(--line); }
+.install-steps li::before { content: counter(step); position: absolute; left: 0; top: var(--space-3); width: 28px; height: 28px; display: grid; place-items: center; background: var(--ink); color: var(--ground); font: 700 14px/1 var(--font-display); }
+.install-steps .title { font: 600 15px/20px var(--font-sans); }
+.install-steps .sub { font: 400 14px/20px var(--font-sans); color: var(--ink-muted); margin-top: 2px; }

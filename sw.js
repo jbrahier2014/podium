@@ -1,12 +1,13 @@
 // Service worker — offline support and fast startup.
 //
-// - App files (this site): network first with a short timeout, falling back to the
-//   saved copy. You always get the newest version when online, and the app still
-//   opens with no connection.
+// - App files (this site): served from this version's saved copy, so the installed app
+//   opens instantly, even offline. Publishing bumps VERSION; the new worker installs in
+//   the background and the app reloads into it (js/app.js).
+// - Nightly data (data/*.json): network first with a short timeout, then the saved copy.
 // - Team logos (ESPN / MLB image hosts): cache first — they almost never change.
 // - Live data APIs: not touched here; js/store/cache.js handles those in IndexedDB.
 
-const VERSION = 'v11';
+const VERSION = 'v20261025-171643';
 const SHELL = `podium-shell-${VERSION}`;
 const IMAGES = 'podium-images-v1';
 
@@ -32,6 +33,7 @@ const PRECACHE = [
   'js/ui/brand.js',
   'js/ui/icons.js',
   'js/ui/components.js',
+  'js/ui/install.js',
   'js/store/settings.js',
   'js/store/cache.js',
   'js/data/index.js',
@@ -58,10 +60,16 @@ const PRECACHE = [
 
 const IMAGE_HOSTS = ['a.espncdn.com', 'www.mlbstatic.com', 'midfield.mlbstatic.com'];
 
+// Each version's files are fetched with ?v=<version> so GitHub Pages' 10-minute CDN
+// cache can't hand back the previous version's copy; they're stored under the plain path.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL)
-      .then((c) => Promise.allSettled(PRECACHE.map((u) => c.add(new Request(u, { cache: 'reload' })))))
+      .then((c) => Promise.allSettled(PRECACHE.map(async (u) => {
+        const res = await fetch(`${u}${u.includes('?') ? '&' : '?'}v=${VERSION}`, { cache: 'reload' });
+        if (!res.ok) throw new Error(`${u}: ${res.status}`);
+        await c.put(new URL(u, self.location).href, res);
+      })))
       .then(() => self.skipWaiting())
   );
 });
@@ -101,6 +109,14 @@ function networkFirst(request, timeoutMs = 2500) {
   });
 }
 
+async function shellFirst(request) {
+  const cache = await caches.open(SHELL);
+  const hit = request.mode === 'navigate'
+    ? (await cache.match(new URL('index.html', self.location).href)) || (await cache.match(new URL('./', self.location).href))
+    : await cache.match(request, { ignoreSearch: true });
+  return hit || networkFirst(request);
+}
+
 async function cacheFirstImage(request) {
   const cache = await caches.open(IMAGES);
   const hit = await cache.match(request);
@@ -120,7 +136,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (url.origin === self.location.origin) {
-    event.respondWith(networkFirst(request));
+    // App files open instantly from this version's saved copy (a new version arrives as
+    // a new service worker, and the app reloads into it). Nightly data stays network first.
+    const isData = url.pathname.includes('/data/');
+    event.respondWith(isData ? networkFirst(request) : shellFirst(request));
   } else if (IMAGE_HOSTS.includes(url.hostname)) {
     event.respondWith(cacheFirstImage(request));
   }

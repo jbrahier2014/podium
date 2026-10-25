@@ -14,6 +14,14 @@ document.documentElement.classList.toggle('standalone', isStandalone);
 
 startRouter();
 
+// An installed app has no reload button: coming back after 5+ minutes away
+// redraws the current screen with fresh data.
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+  else if (hiddenAt && Date.now() - hiddenAt > 5 * 60_000) dispatchEvent(new HashChangeEvent('hashchange'));
+});
+
 // Service worker: makes the app open instantly and work offline.
 // When a new version is published, it installs in the background and the app
 // reloads itself once the new version takes over.
