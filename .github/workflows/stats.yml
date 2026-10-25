@@ -1,0 +1,54 @@
+# Nightly stats: ratings, advanced stats and playoff odds -> data/<league>/<season>.json
+#   - 5:23 AM Eastern every day: full refresh (after late West Coast games finish)
+#   - every 4 hours Thursday through Monday: game-day refresh of in-season leagues
+#   - on demand from the Actions tab ("Run workflow"), or when the job's code changes
+name: Nightly stats
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 9 * * *'          # full nightly run (09:23 UTC)
+    - cron: '53 1,5,13,17,21 * * 0,1,4,5,6'  # game days, about every 4 hours (UTC)
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stats.yml'
+      - 'scripts/stats/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-commits
+  cancel-in-progress: false
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/stats/requirements.txt
+      - name: Install
+        run: pip install -r scripts/stats/requirements.txt
+      - name: Compute stats
+        env:
+          CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+          FULL_RUN: ${{ (github.event_name != 'schedule' || github.event.schedule == '23 9 * * *') && '1' || '0' }}
+        run: python scripts/stats/run.py
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Update stats ($(date -u +'%Y-%m-%d %H:%M') UTC)"
+            git pull --rebase origin main
+            git push
+          fi
