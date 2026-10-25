@@ -309,11 +309,12 @@ export async function getGame(league, gameId, { force = false } = {}) {
   const uniqueDrives = drives.filter((d, i) => drives.findIndex((x) => x.id === d.id) === i);
   const playById = new Map();
   uniqueDrives.forEach((d) => (d.plays || []).forEach((p) => playById.set(String(p.id), p)));
-  const plays = uniqueDrives.slice().reverse().map((d) => {
+  const live = comp.status?.type?.state === 'in';
+  const plays = uniqueDrives.slice().reverse().map((d, i) => {
     const teamId = String(d.team?.id || abbrToId.get(d.team?.abbreviation) || '');
     return {
       teamId,
-      title: d.displayResult || d.result || (d === j.drives?.current ? 'In progress' : 'Drive'),
+      title: d.displayResult || d.result || (live && i === 0 ? 'Current drive' : 'Drive'),
       sub: d.description || '',
       scoring: !!d.isScore,
       items: (d.plays || []).slice().reverse().map((p) => ({
@@ -382,4 +383,157 @@ export async function getGame(league, gameId, { force = false } = {}) {
   ].filter(([, v]) => v).map(([label, value]) => ({ label, value }));
 
   return { game, linescore, scoring, plays, winProb, teamStats, box, info, savedAt, stale, sideOf };
+}
+
+// ---------------------------------------------------------------- standings
+const STANDINGS_BASE = 'https://site.api.espn.com/apis/v2/sports/football';
+
+function entryStats(e) {
+  const by = {};
+  for (const s of e.stats || []) {
+    const key = s.type && s.type !== s.name.toLowerCase() ? s.type : s.name;
+    if (!(key in by)) by[key] = s;
+  }
+  return by;
+}
+
+/**
+ * Standings. Resolves to { views: { [viewId]: { label, groups: [{ name, columns, rows, cutAfter? }] } }, records }.
+ * records: Map teamId -> [{ label, value }] (home, road, division, conference...)
+ */
+export async function getStandings(league, { force = false } = {}) {
+  const url = league === 'nfl' ? `${STANDINGS_BASE}/nfl/standings?level=3` : `${STANDINGS_BASE}/college-football/standings?group=80`;
+  const { data } = await cachedJSON(url, { ttlMs: 10 * MIN, force });
+  const idx = await teamIndex(league);
+  const teamOf = (t) => ({ ...(idx.get(String(t.id)) || normalizeTeam(league, t)), id: String(t.id) });
+  const records = new Map();
+
+  const toRow = (e) => {
+    const s = entryStats(e);
+    const v = (k) => s[k]?.displayValue ?? '';
+    const team = teamOf(e.team);
+    records.set(team.id, [
+      ['Overall', v('total') || v('overall')], ['Home', v('home') || v('homerecord') || v('Home')], ['Road', v('road') || v('awayrecord') || v('Road')],
+      ['Division', v('vsdiv') || v('vsdivision') || v('divisionRecord') || v('vs. Div.')], ['Conference', v('vsconf') || v('vs. Conf.')], ['vs AP Top 25', v('vsaprankedteams')],
+      ['Streak', v('streak')], ['Points for', v('pointsFor') || v('pointsfor')], ['Points against', v('pointsAgainst') || v('pointsagainst')],
+    ].filter(([label, value]) => value && value !== '0-0' && !(label === 'Division' && league === 'cfb')).map(([label, value]) => ({ label, value })));
+    return {
+      team,
+      seed: Number(v('playoffSeed') || v('playoffseed')) || null,
+      wins: Number(v('wins')) || 0,
+      values: {
+        w: v('wins'), l: v('losses'), t: v('ties'), pct: v('winPercent'),
+        pf: v('pointsFor') || v('pointsfor'), pa: v('pointsAgainst') || v('pointsagainst'),
+        diff: v('pointDifferential') || v('differential') || v('pointdifferential'), strk: v('streak'),
+        div: v('divisionRecord') || v('vsdiv') || v('vs. Div.'), conf: v('vsconf') || v('vs. Conf.'), ovr: v('total') || v('overall'),
+      },
+    };
+  };
+
+  if (league === 'nfl') {
+    const cols = [{ key: 'w', label: 'W' }, { key: 'l', label: 'L' }, { key: 'pct', label: 'Pct' }, { key: 'pf', label: 'PF' }, { key: 'pa', label: 'PA' }, { key: 'diff', label: 'Diff' }, { key: 'strk', label: 'Strk' }, { key: 'div', label: 'Div' }];
+    const anyTies = (rows) => rows.some((r) => Number(r.values.t) > 0);
+    const withTies = (rows) => (anyTies(rows) ? [cols[0], cols[1], { key: 't', label: 'T' }, ...cols.slice(2)] : cols);
+    const division = []; const conference = [];
+    for (const conf of data.children || []) {
+      const confRows = [];
+      for (const div of conf.children || []) {
+        const rows = (div.standings?.entries || []).map(toRow);
+        confRows.push(...rows);
+        division.push({ name: div.name, columns: withTies(rows), rows: rows.map((r, i) => ({ ...r, rank: i + 1 })) });
+      }
+      const seeded = confRows.filter((r) => r.seed).sort((a, b) => a.seed - b.seed);
+      const rest = confRows.filter((r) => !r.seed);
+      const all = [...seeded, ...rest];
+      conference.push({ name: conf.abbreviation || conf.name, columns: withTies(all), rows: all.map((r, i) => ({ ...r, rank: r.seed || i + 1 })), cutAfter: 7 });
+    }
+    return { views: { division: { label: 'Division', groups: division }, conference: { label: 'Conference', groups: conference } }, records };
+  }
+
+  // College: one table per conference (Sun Belt shows its two divisions)
+  const cols = [{ key: 'conf', label: 'Conf' }, { key: 'ovr', label: 'Ovr' }, { key: 'pf', label: 'PF' }, { key: 'pa', label: 'PA' }, { key: 'strk', label: 'Strk' }];
+  const groups = [];
+  for (const conf of data.children || []) {
+    const parts = conf.children?.length ? conf.children.map((d) => ({ name: d.name, entries: d.standings?.entries || [] })) : [{ name: conf.name, entries: conf.standings?.entries || [] }];
+    for (const part of parts) {
+      const rows = part.entries.map(toRow);
+      groups.push({ name: part.name, conference: conf.name, columns: cols, rows: rows.map((r, i) => ({ ...r, rank: i + 1 })) });
+    }
+  }
+  return { views: { conference: { label: 'Conference', groups } }, records };
+}
+
+// ---------------------------------------------------------------- roster
+const ROSTER_GROUPS = { offense: 'Offense', defense: 'Defense', specialTeam: 'Special teams', injuredReserveOrOut: 'Injured reserve / out', suspended: 'Suspended', practiceSquad: 'Practice squad' };
+
+/** Roster. Resolves to { groups: [{ name, players: [{ name, jersey, pos, detail }] }] }. */
+export async function getRoster(league, teamId) {
+  const { data } = await cachedJSON(`${BASE}/${PATH[league]}/teams/${teamId}/roster`, { ttlMs: 12 * 60 * MIN });
+  const groups = (data.athletes || []).filter((g) => g.items?.length).map((g) => ({
+    name: ROSTER_GROUPS[g.position] || g.position,
+    players: g.items.map((a) => ({
+      name: a.fullName || a.displayName,
+      jersey: a.jersey || '',
+      pos: a.position?.abbreviation || '',
+      detail: [
+        league === 'cfb' ? a.experience?.displayValue : (a.age ? `${a.age} yrs` : null),
+        a.displayHeight, a.displayWeight,
+        league === 'nfl' ? a.college?.name : a.birthPlace?.displayText,
+      ].filter(Boolean).join(' · '),
+    })),
+  }));
+  return { groups };
+}
+
+// ---------------------------------------------------------------- team season stats
+// [category, ESPN stat name, label, format]
+const TEAM_STAT_GROUPS = [
+  ['Offense', [
+    ['passing', 'yardsPerGame', 'Yards per game', 1],
+    ['passing', 'netPassingYardsPerGame', 'Passing yards per game', 1],
+    ['rushing', 'rushingYardsPerGame', 'Rushing yards per game', 1],
+    ['__ypp', null, 'Yards per play', 2],
+    ['passing', 'completionPct', 'Completion %', 1],
+    ['passing', 'QBRating', 'Passer rating', 1],
+    ['rushing', 'yardsPerRushAttempt', 'Yards per rush', 1],
+    ['miscellaneous', 'firstDownsPerGame', 'First downs per game', 1],
+    ['miscellaneous', 'thirdDownConvPct', 'Third-down %', 1],
+    ['miscellaneous', 'fourthDownConvPct', 'Fourth-down %', 1],
+    ['miscellaneous', 'redzoneTouchdownPct', 'Red-zone TD %', 1],
+  ]],
+  ['Turnovers & pressure', [
+    ['miscellaneous', 'turnOverDifferential', 'Turnover margin', 0],
+    ['miscellaneous', 'totalTakeaways', 'Takeaways', 0],
+    ['miscellaneous', 'totalGiveaways', 'Giveaways', 0],
+    ['defensive', 'sacks', 'Sacks', 0],
+    ['passing', 'sacks', 'Sacks allowed', 0],
+    ['defensive', 'tacklesForLoss', 'Tackles for loss', 0],
+  ]],
+  ['Special teams & discipline', [
+    ['kicking', 'fieldGoalPct', 'Field goal %', 1],
+    ['punting', 'netAvgPuntYards', 'Net punt average', 1],
+    ['__pen', null, 'Penalties per game', 1],
+  ]],
+];
+
+/** Season team stats. Resolves to { groups: [{ name, rows: [{ label, value }] }] }. */
+export async function getTeamStats(league, teamId, season) {
+  const lg = league === 'nfl' ? 'nfl' : 'college-football';
+  const url = `https://sports.core.api.espn.com/v2/sports/football/leagues/${lg}/seasons/${season}/types/2/teams/${teamId}/statistics`;
+  const { data } = await cachedJSON(url, { ttlMs: 60 * MIN });
+  const cats = Object.fromEntries((data.splits?.categories || []).map((c) => [c.name, Object.fromEntries(c.stats.map((s) => [s.name, s]))]));
+  const val = (c, n) => cats[c]?.[n]?.value;
+  const games = val('general', 'gamesPlayed') || val('passing', 'teamGamesPlayed') || 0;
+  const fmt = (v, d) => (v == null || Number.isNaN(v) ? '–' : Number(v).toFixed(d));
+  const groups = TEAM_STAT_GROUPS.map(([name, rows]) => ({
+    name,
+    rows: rows.map(([c, n, label, d]) => {
+      let v;
+      if (c === '__ypp') { const plays = val('passing', 'totalOffensivePlays'); v = plays ? val('passing', 'totalYards') / plays : null; }
+      else if (c === '__pen') v = games ? val('miscellaneous', 'totalPenalties') / games : null;
+      else v = val(c, n);
+      return { label, value: fmt(v, d), raw: v ?? null };
+    }).filter((r) => r.raw != null),
+  })).filter((g) => g.rows.length);
+  return { groups, games };
 }

@@ -316,3 +316,113 @@ export async function getGame(gamePk, { force = false } = {}) {
 
   return { game, linescore, scoring, plays, winProb, teamStats, box: boxOut, info, savedAt, stale };
 }
+
+// ---------------------------------------------------------------- standings
+const LEAGUE_NAME = { 103: 'American League', 104: 'National League' };
+const SPLIT_LABELS = [['home', 'Home'], ['away', 'Away'], ['lastTen', 'Last 10'], ['oneRun', 'One-run games'], ['extraInning', 'Extra innings'], ['winners', 'vs winning teams'], ['left', 'vs left-handed starters'], ['right', 'vs right-handed starters']];
+
+/** Standings by division and wild card. Same shape as the ESPN provider's getStandings. */
+export async function getStandings({ force = false } = {}) {
+  const season = seasonYear('mlb');
+  const url = `${BASE}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason&hydrate=team`;
+  const { data } = await cachedJSON(url, { ttlMs: 10 * MIN, force });
+  const records = new Map();
+  const cols = [{ key: 'w', label: 'W' }, { key: 'l', label: 'L' }, { key: 'pct', label: 'Pct' }, { key: 'gb', label: 'GB' }, { key: 'l10', label: 'L10' }, { key: 'strk', label: 'Strk' }, { key: 'rd', label: 'RD' }];
+  const division = []; const byLeague = { 103: [], 104: [] };
+
+  for (const rec of data.records || []) {
+    const rows = (rec.teamRecords || []).map((tr) => {
+      const split = Object.fromEntries((tr.records?.splitRecords || []).map((s) => [s.type, `${s.wins}-${s.losses}`]));
+      const team = { ...normalizeTeam({ ...tr.team, id: tr.team.id }), rank: null };
+      records.set(team.id, [
+        { label: 'Overall', value: `${tr.wins}-${tr.losses}` },
+        ...SPLIT_LABELS.filter(([k]) => split[k]).map(([k, label]) => ({ label, value: split[k] })),
+        { label: 'Run differential', value: tr.runDifferential > 0 ? `+${tr.runDifferential}` : String(tr.runDifferential) },
+        { label: 'Runs scored / allowed', value: `${tr.runsScored} / ${tr.runsAllowed}` },
+      ]);
+      const row = {
+        team,
+        rank: Number(tr.divisionRank),
+        wcRank: Number(tr.wildCardRank) || null,
+        divisionLeader: !!tr.divisionLeader,
+        clinch: tr.clinchIndicator || null,
+        values: {
+          w: tr.wins, l: tr.losses, pct: tr.winningPercentage, gb: tr.gamesBack, wcgb: tr.wildCardGamesBack,
+          l10: split.lastTen || '', strk: tr.streak?.streakCode || '', rd: tr.runDifferential > 0 ? `+${tr.runDifferential}` : String(tr.runDifferential),
+        },
+      };
+      byLeague[rec.league?.id]?.push(row);
+      return row;
+    }).sort((a, b) => a.rank - b.rank);
+    division.push({ name: DIVISIONS[rec.division?.id] || 'Division', columns: cols, rows });
+  }
+  // Show AL divisions then NL, East / Central / West
+  const order = ['AL East', 'AL Central', 'AL West', 'NL East', 'NL Central', 'NL West'];
+  division.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+
+  const wcCols = [{ key: 'w', label: 'W' }, { key: 'l', label: 'L' }, { key: 'pct', label: 'Pct' }, { key: 'wcgb', label: 'WCGB' }, { key: 'l10', label: 'L10' }, { key: 'strk', label: 'Strk' }];
+  const wildcard = [103, 104].map((lg) => {
+    const rows = byLeague[lg].filter((r) => !r.divisionLeader).sort((a, b) => (a.wcRank || 99) - (b.wcRank || 99)).map((r, i) => ({ ...r, rank: i + 1 }));
+    return { name: `${LEAGUE_NAME[lg]} wild card`, columns: wcCols, rows, cutAfter: 3 };
+  });
+  return { views: { division: { label: 'Division', groups: division }, wildcard: { label: 'Wild card', groups: wildcard } }, records };
+}
+
+// ---------------------------------------------------------------- roster
+const POS_GROUP = (p) => (p === 'P' || p === 'TWP' ? 'Pitchers' : p === 'C' ? 'Catchers' : ['1B', '2B', '3B', 'SS', 'IF'].includes(p) ? 'Infielders' : ['LF', 'CF', 'RF', 'OF'].includes(p) ? 'Outfielders' : 'Designated hitters');
+
+/** Active roster grouped by position. Same shape as the ESPN provider's getRoster. */
+export async function getRoster(teamId) {
+  const { data } = await cachedJSON(`${BASE}/teams/${teamId}/roster?rosterType=active&hydrate=person`, { ttlMs: 6 * 60 * MIN });
+  const groups = new Map(['Pitchers', 'Catchers', 'Infielders', 'Outfielders', 'Designated hitters'].map((g) => [g, []]));
+  for (const r of data.roster || []) {
+    const p = r.person || {};
+    const pos = r.position?.abbreviation || p.primaryPosition?.abbreviation || '';
+    groups.get(POS_GROUP(pos)).push({
+      name: p.fullName,
+      jersey: r.jerseyNumber || '',
+      pos,
+      detail: [p.batSide && p.pitchHand ? `B/T ${p.batSide.code}/${p.pitchHand.code}` : null, p.currentAge ? `${p.currentAge} yrs` : null, p.height, p.weight ? `${p.weight} lbs` : null].filter(Boolean).join(' · '),
+    });
+  }
+  return { groups: [...groups].filter(([, players]) => players.length).map(([name, players]) => ({ name, players: players.sort((a, b) => Number(a.jersey) - Number(b.jersey)) })) };
+}
+
+// ---------------------------------------------------------------- team season stats (with league ranks)
+const HIT_ROWS = [
+  ['avg', 'Batting average', true], ['obp', 'On-base %', true], ['slg', 'Slugging %', true], ['ops', 'OPS', true],
+  ['runs', 'Runs', true], ['homeRuns', 'Home runs', true], ['stolenBases', 'Stolen bases', true],
+  ['__k', 'Strikeout rate', false], ['__bb', 'Walk rate', true], ['babip', 'BABIP', true],
+];
+const PIT_ROWS = [
+  ['era', 'ERA', false], ['whip', 'WHIP', false], ['__pk', 'Strikeout rate', true], ['__pbb', 'Walk rate', false],
+  ['homeRuns', 'Home runs allowed', false], ['avg', 'Opponent average', false], ['saves', 'Saves', true], ['blownSaves', 'Blown saves', false],
+];
+
+function derive(stat, key) {
+  const pa = stat.plateAppearances || stat.battersFaced;
+  if (key === '__k' || key === '__pk') return pa ? (stat.strikeOuts / pa) * 100 : null;
+  if (key === '__bb' || key === '__pbb') return pa ? (stat.baseOnBalls / pa) * 100 : null;
+  const v = stat[key];
+  return v == null ? null : Number(v);
+}
+const display = (key, v) => (v == null ? '–' : key.startsWith('__') ? `${v.toFixed(1)}%` : ['avg', 'obp', 'slg', 'ops', 'babip'].includes(key) ? v.toFixed(3).replace(/^0/, '') : ['era', 'whip'].includes(key) ? v.toFixed(2) : String(Math.round(v)));
+const ord = (n) => ordinal(n);
+
+/** Season stats with league ranks (1 = best of 30). Resolves to { groups: [{ name, rows: [{ label, value, rank }] }] }. */
+export async function getTeamStats(teamId) {
+  const season = seasonYear('mlb');
+  const league = (group) => cachedJSON(`${BASE}/teams/stats?season=${season}&group=${group}&stats=season&sportIds=1`, { ttlMs: 60 * MIN }).then((r) => r.data.stats?.[0]?.splits || []);
+  const [hit, pit] = await Promise.all([league('hitting'), league('pitching')]);
+  const build = (splits, rows) => {
+    const mine = splits.find((s) => String(s.team?.id) === String(teamId));
+    if (!mine) return [];
+    return rows.map(([key, label, higherBetter]) => {
+      const v = derive(mine.stat, key);
+      const all = splits.map((s) => derive(s.stat, key)).filter((x) => x != null);
+      const better = all.filter((x) => (higherBetter ? x > v : x < v)).length;
+      return { label, value: display(key, v), rank: v == null ? null : `${ord(better + 1)}` };
+    });
+  };
+  return { groups: [{ name: 'Hitting', rows: build(hit, HIT_ROWS) }, { name: 'Pitching', rows: build(pit, PIT_ROWS) }].filter((g) => g.rows.length), ranked: true };
+}

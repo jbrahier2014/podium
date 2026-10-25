@@ -691,3 +691,17 @@ details.play-group[open] summary .chev { transform: rotate(90deg); }
 .linescore .ls-team .crest { display: none; }
 .box-section table.stats th, .box-section table.stats td { padding: var(--space-2) 6px; }
 .box-section table.stats th:first-child, .box-section table.stats td:first-child { padding-left: var(--space-4); }
+
+/* ---------- Team page ---------- */
+.sched-row { gap: var(--space-3); }
+.sched-row .sched-date { display: flex; flex-direction: column; width: 72px; flex: none; font: 600 12px/16px var(--font-sans); }
+.sched-row .sched-date .muted { font-weight: 500; }
+.sched-row .sched-result { display: inline-flex; align-items: center; gap: var(--space-2); font: 700 14px/20px var(--font-display); font-variant-numeric: tabular-nums; }
+.sched-row[data-next] { background: var(--surface-hover); }
+.roster-row .jersey { width: 28px; flex: none; text-align: right; font: 700 14px/20px var(--font-display); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.info-row .v .stat-val { font: 700 14px/20px var(--font-display); font-variant-numeric: tabular-nums; }
+.info-row .v .stat-rank { margin-left: var(--space-2); font: 500 12px/20px var(--font-sans); color: var(--ink-muted); display: inline-block; min-width: 34px; text-align: right; }
+table.stats td.team { max-width: 170px; }
+table.stats td.team > span { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+table.stats td.team .st-team { display: flex; align-items: center; gap: var(--space-2); max-width: 168px; }
+table.stats td.team .st-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

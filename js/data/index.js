@@ -9,7 +9,9 @@
 //   getTeamSchedule(league, teamId)     → { record, standing, games: GameSummary[] } [phase 2]
 //   getTodayGames()                     → { [league]: GameSummary[] }                [phase 2]
 //   getGame(league, gameId)             → GameDetail (box, plays, win prob)          [phase 3]
-//   getStandings(league)                → Standings                                  [phase 4]
+//   getStandings(league)                → { views: { id: { label, groups } }, records } [phase 4]
+//   getRoster(league, teamId)           → { groups: [{ name, players }] }             [phase 4]
+//   getTeamStats(league, teamId)        → { groups: [{ name, rows: [{ label, value, rank? }] }] } [phase 4]
 //   getComputed(name)                   → JSON written by the GitHub Action          [phase 5]
 //
 // Team:  { league, id, name, short, abbr, color, altColor, logo, conference?, rank? }
@@ -31,7 +33,7 @@
 import * as espn from './providers/espn.js';
 import * as mlb from './providers/mlb.js';
 import { cachedJSON } from '../store/cache.js';
-import { inSeason } from '../leagues.js';
+import { inSeason, seasonYear } from '../leagues.js';
 import { etISODate } from '../util/time.js';
 
 const PROVIDERS = { nfl: espn, cfb: espn, mlb };
@@ -87,6 +89,18 @@ export function getTeamSchedule(league, teamId, opts = {}) {
 }
 
 export const nearbyMlbDates = (date) => mlb.nearbyGameDates(date);
+
+export function getStandings(league, opts = {}) {
+  return track(sourceFor(league), league === 'mlb' ? mlb.getStandings(opts) : espn.getStandings(league, opts));
+}
+
+export function getRoster(league, teamId) {
+  return track(sourceFor(league), league === 'mlb' ? mlb.getRoster(teamId) : espn.getRoster(league, teamId));
+}
+
+export function getTeamStats(league, teamId) {
+  return track(sourceFor(league), league === 'mlb' ? mlb.getTeamStats(teamId) : espn.getTeamStats(league, teamId, seasonYear(league)));
+}
 
 /** Full detail for one game (box score, plays, win probability...). opts.force skips the cache. */
 export function getGame(league, gameId, opts = {}) {

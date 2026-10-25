@@ -179,7 +179,7 @@ export function standingsTable({ columns, rows, cutAfter, onRowClick }) {
         onclick: onRowClick ? () => onRowClick(r) : null,
         style: onRowClick ? { cursor: 'pointer' } : null,
       },
-      h('td', { class: 'team' }, h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } }, rankBadge(r.rank), crest(r.team, 'sm'), r.team.short || r.team.name)),
+      h('td', { class: 'team' }, h('span', { class: 'st-team' }, rankBadge(r.rank), crest(r.team, 'sm'), h('span', { class: 'st-name' }, r.team.short || r.team.name))),
       columns.map((c) => h('td', {}, c.format ? c.format(r[c.key], r) : r[c.key])))))));
 }
 
