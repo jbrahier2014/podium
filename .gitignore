@@ -1,0 +1,9 @@
+# Local logs from the setup/publish scripts (never uploaded)
+setup/*-log.txt
+setup/next-commit-message.txt
+# Editor / OS clutter
+.DS_Store
+Thumbs.db
+.vscode/
+node_modules/
+__pycache__/
