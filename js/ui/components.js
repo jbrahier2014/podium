@@ -150,15 +150,15 @@ export function chips(items, value, onChange, { label = 'Filter' } = {}) {
  * Two-sided comparison. The leading side's segment is podium; the other is line-strong.
  * lowerIsBetter flips which side leads (e.g. turnovers).
  */
-export function statBar({ label, home, away, format = (v) => v, lowerIsBetter = false }) {
+export function statBar({ label, home, away, format = (v) => v, lowerIsBetter = false, display }) {
   const total = Math.abs(home) + Math.abs(away) || 1;
   const homeLeads = lowerIsBetter ? home < away : home > away;
   const awayLeads = lowerIsBetter ? away < home : away > home;
   return h('div', { class: 'statbar' },
     h('div', { class: 'sb-labels' },
-      h('span', { class: `sb-val${homeLeads ? '' : ' trail'}` }, format(home)),
+      h('span', { class: `sb-val${homeLeads ? '' : ' trail'}` }, display ? display[0] : format(home)),
       h('span', { class: 'sb-name' }, label),
-      h('span', { class: `sb-val${awayLeads ? '' : ' trail'}` }, format(away))),
+      h('span', { class: `sb-val${awayLeads ? '' : ' trail'}` }, display ? display[1] : format(away))),
     h('div', { class: 'sb-track' },
       h('span', { class: `sb-seg${homeLeads ? ' lead' : ''}`, style: { flex: String(Math.abs(home) / total || 0.5) } }),
       h('span', { class: `sb-seg${awayLeads ? ' lead' : ''}`, style: { flex: String(Math.abs(away) / total || 0.5) } })));

@@ -214,3 +214,172 @@ export async function getTeamSchedule(league, teamId, { force = false } = {}) {
 
 export const describeWeek = (w) => (w ? `${w.label}${w.detail ? ` · ${w.detail}` : ''}` : '');
 export const dayLabel = (iso) => etDay(`${iso}T16:00:00Z`);
+
+// ---------------------------------------------------------------- game detail
+const STAT_ROWS = [
+  // [ESPN stat name, label, how to compare, lower is better?]
+  ['totalYards', 'Total yards'],
+  ['netPassingYards', 'Passing yards'],
+  ['rushingYards', 'Rushing yards'],
+  ['yardsPerPlay', 'Yards per play'],
+  ['firstDowns', 'First downs'],
+  ['thirdDownEff', '3rd down', 'ratio'],
+  ['fourthDownEff', '4th down', 'ratio'],
+  ['redZoneAttempts', 'Red zone (made-att)', 'ratio'],
+  ['completionAttempts', 'Comp/att', 'ratio', false, '/'],
+  ['sacksYardsLost', 'Sacks allowed', 'first', true],
+  ['turnovers', 'Turnovers', 'num', true],
+  ['totalPenaltiesYards', 'Penalties', 'first', true],
+  ['possessionTime', 'Possession', 'time'],
+];
+
+function statValue(display, kind, sep = '-') {
+  const s = String(display ?? '').trim();
+  if (kind === 'time') { const [m, sec] = s.split(':').map(Number); return (m || 0) * 60 + (sec || 0); }
+  if (kind === 'ratio') { const [a, b] = s.split(sep).map(Number); return b ? a / b : 0; }
+  if (kind === 'first') return Number(s.split('-')[0]) || 0;
+  return Number(s) || 0;
+}
+
+const clockSeconds = (c) => { const [m, s] = String(c || '0:00').split(':').map(Number); return (m || 0) * 60 + (s || 0); };
+
+/** Minutes of game time elapsed at a play (regulation quarters are 15 min). */
+function elapsedMinutes(play) {
+  const p = play?.period?.number || 1;
+  const len = p <= 4 ? 15 : 10;
+  const base = p <= 4 ? (p - 1) * 15 : 60 + (p - 5) * 10;
+  return base + (len - clockSeconds(play?.clock?.displayValue) / 60);
+}
+
+/**
+ * Full game detail (see GameDetail in ../index.js).
+ */
+export async function getGame(league, gameId, { force = false } = {}) {
+  const url = `${BASE}/${PATH[league]}/summary?event=${gameId}`;
+  const { data: j, savedAt, stale } = await cachedJSON(url, {
+    force,
+    ttlMs: MIN,
+    final: (d) => !!d.header?.competitions?.[0]?.status?.type?.completed,
+  });
+  const idx = await teamIndex(league);
+  const comp = j.header?.competitions?.[0] || {};
+  // Live situation: who has the ball and the down/distance after the last play
+  const cur = j.drives?.current;
+  const lastPlay = cur?.plays?.[cur.plays.length - 1];
+  const possessor = comp.competitors?.find((c) => c.possession);
+  const situation = j.situation || (cur ? {
+    possession: possessor?.team?.id || cur.team?.id,
+    downDistanceText: lastPlay?.end?.downDistanceText,
+    isRedZone: lastPlay?.end?.yardsToEndzone != null && lastPlay.end.yardsToEndzone <= 20,
+    lastPlay: { text: lastPlay?.text },
+  } : undefined);
+  const ev = { id: gameId, date: comp.date, season: j.header?.season, week: j.header?.week, competitions: [{
+    ...comp,
+    venue: j.gameInfo?.venue,
+    situation,
+    competitors: (comp.competitors || []).map((c) => ({ ...c, curatedRank: c.rank ? { current: c.rank } : c.curatedRank, records: Array.isArray(c.record) ? c.record : c.records })),
+  }] };
+  const game = normalizeEvent(league, ev, idx);
+  const abbrToId = new Map((comp.competitors || []).map((c) => [c.team?.abbreviation, String(c.team?.id)]));
+  const sideOf = (teamId) => (teamId === game.home?.team.id ? 'home' : 'away');
+
+  // Line score
+  const n = Math.max(4, ...(comp.competitors || []).map((c) => c.linescores?.length || 0));
+  const per = (s) => Array.from({ length: n }, (_, i) => s?.linescores?.[i]?.displayValue ?? '');
+  const homeC = comp.competitors?.find((c) => c.homeAway === 'home');
+  const awayC = comp.competitors?.find((c) => c.homeAway === 'away');
+  const linescore = game.status.state === 'pre' ? null : {
+    labels: Array.from({ length: n }, (_, i) => (i < 4 ? String(i + 1) : i === 4 ? 'OT' : `${i - 3}OT`)),
+    away: per(awayC), home: per(homeC),
+    totalLabels: ['T'], awayTotals: [game.away?.score ?? ''], homeTotals: [game.home?.score ?? ''],
+  };
+
+  // Scoring summary
+  const scoring = (j.scoringPlays || []).map((p) => ({
+    period: periodLabel(p.period?.number || 1),
+    clock: p.clock?.displayValue || '',
+    teamId: abbrToId.get(p.team?.abbreviation) || String(p.team?.id || ''),
+    type: p.type?.abbreviation || '',
+    text: p.text,
+    away: p.awayScore, home: p.homeScore,
+  }));
+
+  // Drives and plays (newest first)
+  const drives = [...(j.drives?.previous || []), ...(j.drives?.current ? [j.drives.current] : [])];
+  const uniqueDrives = drives.filter((d, i) => drives.findIndex((x) => x.id === d.id) === i);
+  const playById = new Map();
+  uniqueDrives.forEach((d) => (d.plays || []).forEach((p) => playById.set(String(p.id), p)));
+  const plays = uniqueDrives.slice().reverse().map((d) => {
+    const teamId = String(d.team?.id || abbrToId.get(d.team?.abbreviation) || '');
+    return {
+      teamId,
+      title: d.displayResult || d.result || (d === j.drives?.current ? 'In progress' : 'Drive'),
+      sub: d.description || '',
+      scoring: !!d.isScore,
+      items: (d.plays || []).slice().reverse().map((p) => ({
+        meta: `${periodLabel(p.period?.number || 1)} ${p.clock?.displayValue || ''}${p.start?.downDistanceText ? ` · ${p.start.downDistanceText}` : ''}`,
+        text: p.text,
+        scoring: !!p.scoringPlay,
+      })),
+    };
+  });
+
+  // Win probability (home team, 0-100) against game minutes
+  const wpRaw = j.winprobability || [];
+  const winProb = wpRaw.map((w, i) => {
+    const play = playById.get(String(w.playId));
+    return {
+      x: play ? elapsedMinutes(play) : null,
+      home: Math.round((w.homeWinPercentage ?? 0.5) * 1000) / 10,
+      label: play ? `${periodLabel(play.period?.number || 1)} ${play.clock?.displayValue || ''}` : '',
+      i,
+    };
+  });
+  // Fill any points without a matching play by interpolating between neighbors.
+  winProb.forEach((pt, i) => {
+    if (pt.x != null) return;
+    const prev = winProb.slice(0, i).reverse().find((q) => q.x != null);
+    const next = winProb.slice(i + 1).find((q) => q.x != null);
+    pt.x = prev && next ? (prev.x + next.x) / 2 : prev ? prev.x : next ? next.x : 0;
+  });
+
+  // Team stats comparison
+  const boxTeams = j.boxscore?.teams || [];
+  const statsFor = (side) => boxTeams.find((t) => t.homeAway === side) || boxTeams.find((t) => String(t.team?.id) === game[side]?.team.id);
+  const awayStats = statsFor('away'); const homeStats = statsFor('home');
+  const pick = (t, name) => t?.statistics?.find((s) => s.name === name)?.displayValue;
+  const teamStats = (awayStats && homeStats) ? STAT_ROWS.filter(([name]) => pick(awayStats, name) != null).map(([name, label, kind = 'num', lower = false, sep]) => ({
+    label,
+    away: statValue(pick(awayStats, name), kind, sep), home: statValue(pick(homeStats, name), kind, sep),
+    awayDisplay: String(pick(awayStats, name)).trim(), homeDisplay: String(pick(homeStats, name)).trim(),
+    lowerIsBetter: lower,
+  })) : [];
+
+  // Box score: player lines by category
+  const WANT = ['passing', 'rushing', 'receiving', 'defensive', 'interceptions', 'kicking', 'punting'];
+  const TITLES = { passing: 'Passing', rushing: 'Rushing', receiving: 'Receiving', defensive: 'Defense', interceptions: 'Interceptions', kicking: 'Kicking', punting: 'Punting' };
+  const boxFor = (teamId) => {
+    const t = (j.boxscore?.players || []).find((p) => String(p.team?.id) === teamId);
+    if (!t) return [];
+    return WANT.map((cat) => t.statistics?.find((s) => s.name === cat)).filter((s) => s && s.athletes?.length).map((s) => ({
+      title: TITLES[s.name] || s.name,
+      labels: s.labels || [],
+      rows: s.athletes.slice(0, s.name === 'defensive' ? 8 : 6).map((a) => ({ name: a.athlete?.shortName || a.athlete?.displayName, values: a.stats || [] })),
+      totals: s.totals || null,
+    }));
+  };
+  const box = game.status.state === 'pre' ? null : { away: boxFor(game.away.team.id), home: boxFor(game.home.team.id) };
+
+  // Game info
+  const pc = j.pickcenter?.[0];
+  const w = j.gameInfo?.weather;
+  const info = [
+    ['Venue', [j.gameInfo?.venue?.fullName, j.gameInfo?.venue?.address?.city].filter(Boolean).join(', ')],
+    ['Broadcast', game.broadcast],
+    ['Line', pc?.details ? `${pc.details}${pc.overUnder ? ` · O/U ${pc.overUnder}` : ''}` : null],
+    ['Weather', w?.temperature != null ? `${w.temperature}°F${w.conditionId && !/^\d+$/.test(w.conditionId) ? `, ${w.conditionId}` : ''}` : null],
+    ['Attendance', j.gameInfo?.attendance ? Number(j.gameInfo.attendance).toLocaleString('en-US') : null],
+  ].filter(([, v]) => v).map(([label, value]) => ({ label, value }));
+
+  return { game, linescore, scoring, plays, winProb, teamStats, box, info, savedAt, stale, sideOf };
+}

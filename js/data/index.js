@@ -88,6 +88,12 @@ export function getTeamSchedule(league, teamId, opts = {}) {
 
 export const nearbyMlbDates = (date) => mlb.nearbyGameDates(date);
 
+/** Full detail for one game (box score, plays, win probability...). opts.force skips the cache. */
+export function getGame(league, gameId, opts = {}) {
+  const p = league === 'mlb' ? mlb.getGame(gameId, opts) : espn.getGame(league, gameId, opts);
+  return track(sourceFor(league), p);
+}
+
 /** Today's games (Eastern date) for every in-season league. */
 export async function getTodayGames({ force = false } = {}) {
   const today = etISODate();

@@ -623,3 +623,71 @@ details.gloss[open] summary .chev { transform: rotate(90deg); }
 .scorecard .sc-head .badge { flex: none; }
 .scorecard .sc-foot { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .game-list { grid-template-columns: minmax(0, 1fr); }
+
+/* ---------- Game detail ---------- */
+.game-hero { margin: var(--space-2) var(--gutter) var(--space-5); }
+.game-hero .gh-context { text-align: center; color: var(--ink-muted); font: 700 12px/16px var(--font-display); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: var(--space-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-hero .gh-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.game-hero .gh-team { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; min-width: 0; color: var(--ink); }
+.game-hero .gh-team .nm { font: 600 14px/20px var(--font-sans); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-hero .gh-team .rk { font: 700 12px/16px var(--font-display); color: var(--ink-muted); margin-right: 2px; }
+.game-hero .gh-team .rec { font: 500 12px/16px var(--font-sans); color: var(--ink-muted); }
+.game-hero .gh-mid { display: flex; align-items: center; gap: var(--space-3); }
+.game-hero .gh-score { font: 700 40px/40px var(--font-display); font-variant-numeric: tabular-nums; min-width: 1.4ch; text-align: center; }
+.game-hero .gh-score.loser { color: var(--ink-muted); }
+.game-hero .gh-dash { color: var(--ink-muted); font: 700 20px/20px var(--font-display); }
+.game-hero .gh-status { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); margin-top: var(--space-3); }
+.game-hero .gh-sub { font: 500 12px/16px var(--font-sans); color: var(--ink-muted); text-align: center; }
+
+.linescore table.stats th, .linescore table.stats td { padding: var(--space-2) var(--space-2); min-width: 28px; text-align: center; }
+.linescore table.stats th:first-child, .linescore table.stats td:first-child { text-align: left; min-width: 64px; }
+.linescore table.stats td.tot, .linescore table.stats th.tot { font-weight: 700; color: var(--ink); }
+.linescore table.stats td.tot { border-left: 1px solid var(--line); }
+.linescore .ls-team { display: inline-flex; align-items: center; gap: var(--space-2); font: 600 14px/20px var(--font-sans); }
+
+.wp-card { padding: var(--space-4); }
+.wp-card .wp-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.wp-card .wp-now { font: 700 20px/26px var(--font-display); font-variant-numeric: tabular-nums; }
+.wp-card .wp-now .who { color: var(--ink-muted); font: 600 14px/20px var(--font-sans); margin-left: var(--space-1); }
+.wp-card .wp-canvas { position: relative; height: 180px; }
+
+.score-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; padding: var(--space-3) var(--space-4); }
+.score-row + .score-row { border-top: 1px solid var(--line); }
+.score-row .when { font: 700 12px/16px var(--font-display); letter-spacing: 0.5px; color: var(--ink-muted); text-transform: uppercase; }
+.score-row .txt { font: 400 14px/20px var(--font-sans); }
+.score-row .sc { font: 700 14px/20px var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.score-row .lead { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
+
+.info-row { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
+.info-row + .info-row { border-top: 1px solid var(--line); }
+.info-row .k { color: var(--ink-muted); font: 500 12px/20px var(--font-sans); flex: none; }
+.info-row .v { text-align: right; font: 400 14px/20px var(--font-sans); }
+
+.box-section { margin-bottom: var(--space-3); }
+.box-section .bs-title { padding: var(--space-3) var(--space-4) var(--space-1); font: 700 12px/16px var(--font-display); letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-muted); }
+.box-section table.stats td:first-child { font-family: var(--font-sans); font-weight: 600; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.box-section table.stats td.sub { color: var(--ink-muted); font-weight: 400; padding-left: var(--space-5); }
+.box-section table.stats tr.totals td { font-weight: 700; border-top: 1px solid var(--line-strong); }
+
+details.play-group + details.play-group { border-top: 1px solid var(--line); }
+details.play-group summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+details.play-group summary::-webkit-details-marker { display: none; }
+details.play-group summary .grow { flex: 1; min-width: 0; }
+details.play-group summary .title { font: 600 14px/20px var(--font-sans); }
+details.play-group summary .sub { font: 500 12px/16px var(--font-sans); color: var(--ink-muted); }
+details.play-group summary .chev { width: 16px; height: 16px; color: var(--ink-muted); transition: transform 120ms linear; }
+details.play-group[open] summary .chev { transform: rotate(90deg); }
+.play-item { padding: var(--space-2) var(--space-4) var(--space-2) calc(var(--space-4) + 32px + var(--space-3)); }
+.play-item .meta { font: 500 12px/16px var(--font-sans); color: var(--ink-muted); }
+.play-item .txt { font: 400 14px/20px var(--font-sans); }
+.play-item.scoring .txt { font-weight: 600; }
+.play-group .pg-body { padding-bottom: var(--space-3); }
+
+.stat-compare { padding: var(--space-4); display: grid; gap: var(--space-5); }
+.stat-compare .sc-teams { display: flex; justify-content: space-between; align-items: center; }
+.stat-compare .sc-teams span { display: inline-flex; align-items: center; gap: var(--space-2); font: 600 14px/20px var(--font-sans); }
+.linescore table.stats th, .linescore table.stats td { padding: var(--space-2) 3px; min-width: 22px; font-size: 13px; }
+.linescore table.stats th:first-child, .linescore table.stats td:first-child { padding-left: var(--space-3); min-width: 0; }
+.linescore .ls-team .crest { display: none; }
+.box-section table.stats th, .box-section table.stats td { padding: var(--space-2) 6px; }
+.box-section table.stats th:first-child, .box-section table.stats td:first-child { padding-left: var(--space-4); }
