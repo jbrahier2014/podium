@@ -1,0 +1,46 @@
+# Saves NFL and FBS team lists from ESPN into data/teams/ (ESPN blocks these
+# endpoints from browsers, so the app can't fetch them itself).
+# Runs weekly, whenever this file or the script changes, or on demand from the
+# Actions tab ("Run workflow").
+name: Team lists
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'   # Mondays 09:17 UTC
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/teams.yml'
+      - 'scripts/fetch-teams.mjs'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-commits
+  cancel-in-progress: false
+
+jobs:
+  teams:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Fetch team lists
+        run: node scripts/fetch-teams.mjs
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/teams
+          if git diff --cached --quiet; then
+            echo "Team lists unchanged."
+          else
+            git commit -m "Update team lists"
+            git pull --rebase origin main
+            git push
+          fi
