@@ -112,7 +112,8 @@ export default {
       h('a', { href: '#/glossary' }, 'How each rating works'), '.'));
     if (league === 'cfb') {
       body.append(h('p', { class: 'footnote' }, 'Compare with Jeff Sagarin’s ratings at ',
-        h('a', { href: 'https://sagarin.com/sports/cfsend.htm', target: '_blank', rel: 'noopener' }, 'sagarin.com'), '.'));
+        h('a', { href: 'https://sagarin.com/sports/cfsend.htm', target: '_blank', rel: 'noopener' }, 'sagarin.com'), ', or with the ',
+        h('a', { href: '#/polls' }, 'AP poll and CFP rankings'), '.'));
     }
   },
 };

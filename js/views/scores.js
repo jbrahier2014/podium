@@ -30,7 +30,9 @@ export default {
     const league = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague();
     const q = ctx.query;
     ctx.setTitle('Scores');
-    ctx.setActions(h('a', { href: `#/standings/${LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague()}`, class: 't-label', style: { color: 'var(--link)' } }, 'Standings'));
+    const lg = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague();
+    const navLink = (href, text) => h('a', { href, class: 't-label', style: { color: 'var(--link)' } }, text);
+    ctx.setActions(...(lg === 'cfb' ? [navLink('#/polls', 'Polls'), h('span', { style: { width: 'var(--space-4)', display: 'inline-block' } })] : []), navLink(`#/standings/${lg}`, 'Standings'));
 
     const controls = h('div');
     const body = h('div', {}, skeletonList());

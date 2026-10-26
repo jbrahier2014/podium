@@ -23,6 +23,7 @@ const ROUTES = [
   ['settings', () => import('./views/settings.js')],
   ['sources', () => import('./views/sources.js')],
   ['standings/:league', () => import('./views/standings.js')],
+  ['polls', () => import('./views/polls.js')],
   ['team/:league/:id', () => import('./views/team.js')],
   ['game/:league/:id', () => import('./views/game.js')],
 ];

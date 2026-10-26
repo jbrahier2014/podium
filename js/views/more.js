@@ -12,6 +12,7 @@ export default {
     ctx.el.append(
       ...pageTitle('More'),
       h('div', { class: 'list' },
+        listRow({ href: '#/polls', iconName: 'standings', title: 'College polls', sub: 'AP Top 25 and CFP rankings, any week' }),
         listRow({ href: '#/glossary', iconName: 'book', title: 'Glossary', sub: 'Every stat, with its formula' }),
         listRow({ href: '#/settings', iconName: 'settings', title: 'Settings' }),
         listRow({ href: '#/sources', iconName: 'signal', title: 'Data sources', sub: 'Live status check' }),
