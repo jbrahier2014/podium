@@ -87,7 +87,7 @@ export default {
       if (my !== watchToken || !ctx.isCurrent()) return;
       clear(watch);
       if (!picks.length) {
-        watch.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'Nothing standout coming up', text: 'Close games, ranked matchups and upsets show up here.' })));
+        watch.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'Nothing standout in the next 24 hours', text: 'Live close games, upsets, ranked matchups and toss-ups show up here.' })));
         return;
       }
       watch.append(h('div', { class: 'game-list' }, picks.map(watchCard)));

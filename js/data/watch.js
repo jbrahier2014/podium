@@ -1,5 +1,5 @@
 // "Worth watching": the games most likely to be close, competitive or dramatic,
-// live now or coming up in the next week, across the in-season leagues.
+// live now or starting in the next 24 hours, across the in-season leagues.
 //
 // Live games score on how close they are (ESPN's live win probability when it has
 // it, otherwise the margin) weighted by how late it is, plus upsets in progress.
@@ -11,6 +11,7 @@
 import { getScoreboard, getRatings } from './index.js';
 import { inSeason } from '../leagues.js';
 import { pctLabel } from '../util/prob.js';
+import { etISODate } from '../util/time.js';
 
 const DAY = 24 * 3600 * 1000;
 
@@ -112,12 +113,18 @@ const ordinalInning = (n) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 ===
  * Picks for Home. today: { league: [games] } already loaded by Home (live/today).
  * Returns [{ game, score, reasons, mine }], live first then by start time.
  */
-export async function worthWatching({ today = {}, featuredIds = new Set(), limit = 6, days = 7 } = {}) {
+export async function worthWatching({ today = {}, featuredIds = new Set(), limit = 6, hours = 24 } = {}) {
   const leagues = ['nfl', 'cfb', 'mlb'].filter((l) => inSeason(l));
   const byId = new Map();
-  const add = (g) => { if (g && (g.status.state === 'in' || g.status.state === 'pre')) byId.set(`${g.league}-${g.id}`, g); };
+  // Live now, or starting within the next `hours`
+  const soon = Date.now() + hours * 3600_000;
+  const add = (g) => { if (g && (g.status.state === 'in' || (g.status.state === 'pre' && Date.parse(g.start) <= soon))) byId.set(`${g.league}-${g.id}`, g); };
   Object.values(today).flat().forEach(add);
-  await Promise.all(leagues.filter((l) => l !== 'mlb').map((l) => footballSlate(l, days).then((gs) => gs.forEach(add)).catch(() => {})));
+  await Promise.all(leagues.filter((l) => l !== 'mlb').map((l) => footballSlate(l, hours / 24).then((gs) => gs.forEach(add)).catch(() => {})));
+  // Baseball: tomorrow's games can fall inside the window too
+  if (leagues.includes('mlb')) {
+    await getScoreboard('mlb', { date: etISODate(new Date(Date.now() + 24 * 3600_000)) }).then((r) => r.games.forEach(add)).catch(() => {});
+  }
   // Live games from today's scoreboard are fresher than the weekly one
   Object.values(today).flat().forEach(add);
 
