@@ -182,7 +182,11 @@ export async function getTeamSchedule(teamId, { force = false } = {}) {
 const FEED_FIELDS = ['gameData', 'status', 'abstractGameState', 'detailedState', 'codedGameState', 'startTimeTBD', 'teams', 'away', 'home', 'id', 'name', 'teamName', 'abbreviation', 'venue', 'weather', 'condition', 'temp', 'wind', 'datetime', 'dateTime', 'officialDate', 'probablePitchers', 'game', 'type',
   'liveData', 'linescore', 'currentInning', 'currentInningOrdinal', 'inningState', 'scheduledInnings', 'innings', 'num', 'ordinalNum', 'runs', 'hits', 'errors', 'leftOnBase', 'outs', 'balls', 'strikes', 'offense', 'first', 'second', 'third', 'batter', 'pitcher', 'fullName', 'lastName',
   'boxscore', 'teamStats', 'batting', 'pitching', 'players', 'person', 'position', 'battingOrder', 'batters', 'pitchers', 'stats', 'seasonStats', 'atBats', 'rbi', 'baseOnBalls', 'strikeOuts', 'homeRuns', 'avg', 'obp', 'slg', 'ops', 'doubles', 'triples', 'stolenBases', 'inningsPitched', 'earnedRuns', 'pitchesThrown', 'numberOfPitches', 'era', 'note', 'summary', 'totalBases', 'plateAppearances', 'hitByPitch', 'whip', 'battersFaced',
-  'plays', 'allPlays', 'result', 'description', 'event', 'awayScore', 'homeScore', 'about', 'inning', 'halfInning', 'isScoringPlay', 'atBatIndex', 'isComplete', 'scoringPlays', 'decisions', 'winner', 'loser', 'save'].join(',');
+  'plays', 'allPlays', 'result', 'description', 'event', 'awayScore', 'homeScore', 'about', 'inning', 'halfInning', 'isScoringPlay', 'atBatIndex', 'isComplete', 'scoringPlays', 'decisions', 'winner', 'loser', 'save',
+  // Pitch by pitch, for run value (js/data/rv.js)
+  'eventType', 'isTopInning', 'matchup', 'batSide', 'pitchHand', 'code', 'postOnFirst', 'postOnSecond', 'postOnThird', 'count',
+  'runners', 'movement', 'start', 'end', 'isOut', 'details', 'playIndex', 'runner', 'playEvents', 'index', 'isPitch', 'call', 'isInPlay',
+  'pitchData', 'startSpeed', 'coordinates', 'pX', 'pZ', 'strikeZoneTop', 'strikeZoneBottom'].join(',');
 
 const halfLabel = (half, inning) => `${half === 'top' ? 'Top' : 'Bot'} ${ordinal(inning)}`;
 
@@ -244,11 +248,39 @@ export async function getGame(gamePk, { force = false } = {}) {
     const key = `${p.about.halfInning}-${p.about.inning}`;
     let g = halves[halves.length - 1];
     if (!g || g.key !== key) { g = { key, teamId: teamIdFor(p.about.halfInning), title: halfLabel(p.about.halfInning, p.about.inning), items: [] }; halves.push(g); }
-    g.items.push({ meta: `${p.result.event || ''}`, text: p.result.description, scoring: !!p.about.isScoringPlay, score: `${p.result.awayScore}–${p.result.homeScore}` });
+    g.items.push({ id: String(p.about.atBatIndex), meta: `${p.result.event || ''}`, text: p.result.description, scoring: !!p.about.isScoringPlay, score: `${p.result.awayScore}–${p.result.homeScore}` });
   }
   const plays = halves.reverse().map((g) => {
     const lastItem = g.items[g.items.length - 1];
     return { teamId: g.teamId, title: g.title, sub: lastItem ? `${game.away.team.abbr} ${lastItem.score.replace('–', `, ${game.home.team.abbr} `)}` : '', scoring: g.items.some((x) => x.scoring), items: g.items.slice().reverse() };
+  });
+
+  // Plate appearances pitch by pitch, chronological, for run value (js/data/rv.js)
+  const BIT = { '1B': 1, '2B': 2, '3B': 4 };
+  const pas = all.map((p) => {
+    const mu = p.matchup || {};
+    return {
+      id: String(p.about.atBatIndex), inning: p.about.inning, half: p.about.halfInning,
+      battingTeamId: teamIdFor(p.about.halfInning),
+      batter: { id: mu.batter?.id, name: mu.batter?.fullName || '' }, pitcher: { id: mu.pitcher?.id, name: mu.pitcher?.fullName || '' },
+      batSide: mu.batSide?.code || null, pitchHand: mu.pitchHand?.code || null,
+      complete: !!p.about.isComplete, event: p.result?.event || '', eventType: p.result?.eventType || '', text: p.result?.description || '',
+      awayScore: p.result?.awayScore ?? null, homeScore: p.result?.homeScore ?? null,
+      outsEnd: p.count?.outs ?? null,
+      postBits: (mu.postOnFirst ? 1 : 0) | (mu.postOnSecond ? 2 : 0) | (mu.postOnThird ? 4 : 0),
+      runners: (p.runners || []).map((r) => ({
+        id: r.details?.runner?.id ?? null, start: BIT[r.movement?.start] || 0, end: r.movement?.end === 'score' ? 'score' : (BIT[r.movement?.end] || 0),
+        isOut: !!r.movement?.isOut, playIndex: r.details?.playIndex ?? null,
+      })),
+      events: (p.playEvents || []).map((e) => ({
+        index: e.index, isPitch: !!e.isPitch,
+        balls: e.count?.balls ?? 0, strikes: e.count?.strikes ?? 0, outs: e.count?.outs ?? 0,
+        call: e.details?.call?.description || e.details?.description || '', text: e.details?.description || '',
+        pitchType: e.details?.type?.code || null, pitchName: e.details?.type?.description || null,
+        speed: e.pitchData?.startSpeed ?? null, px: e.pitchData?.coordinates?.pX ?? null, pz: e.pitchData?.coordinates?.pZ ?? null,
+        szTop: e.pitchData?.strikeZoneTop ?? null, szBot: e.pitchData?.strikeZoneBottom ?? null, inPlay: !!e.details?.isInPlay,
+      })),
+    };
   });
 
   // Win probability per plate appearance (separate small endpoint)
@@ -316,7 +348,7 @@ export async function getGame(gamePk, { force = false } = {}) {
     ['Weather', gd.weather?.temp ? `${gd.weather.temp}°F, ${gd.weather.condition}${gd.weather.wind && !/^0 mph/.test(gd.weather.wind) ? `, wind ${gd.weather.wind}` : ''}` : null],
   ].filter(([, v]) => v).map(([label, value]) => ({ label, value }));
 
-  return { game, linescore, scoring, plays, winProb, teamStats, box: boxOut, info, savedAt, stale };
+  return { game, linescore, scoring, plays, pas, winProb, teamStats, box: boxOut, info, savedAt, stale };
 }
 
 // ---------------------------------------------------------------- standings

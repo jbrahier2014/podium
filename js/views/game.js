@@ -13,12 +13,15 @@ import { crest, badge, tabs, chips, statBar, emptyState } from '../ui/components
 import { footText } from '../ui/format.js';
 import { loadEP } from '../data/ep.js';
 import { epSection, drawEPA, epaById, epaChip } from './game-ep.js';
+import { loadRV } from '../data/rv.js';
+import { rvSection, drawRV, rvByPA, rvChip, pitchList } from './game-rv.js';
 
 const TABS = [
   { id: 'summary', label: 'Summary' },
   { id: 'box', label: 'Box score' },
   { id: 'plays', label: 'Plays' },
   { id: 'epa', label: 'EPA', football: true },
+  { id: 'rv', label: 'Run value', baseball: true },
   { id: 'stats', label: 'Team stats' },
 ];
 
@@ -31,9 +34,9 @@ export default {
     const hero = h('div', { class: 'game-hero' }, h('div', { class: 'skeleton', style: { height: '150px' } }));
     const body = h('div');
     const football = league !== 'mlb';
-    const tabList = TABS.filter((t) => !t.football || football);
-    const state = { tab: ctx.query.tab && tabList.some((t) => t.id === ctx.query.tab) ? ctx.query.tab : 'summary', boxSide: 'away', open: new Set(), whatIf: null };
-    const modelLoad = football ? loadEP(league).catch(() => null) : Promise.resolve(null);
+    const tabList = TABS.filter((t) => (!t.football || football) && (!t.baseball || !football));
+    const state = { tab: ctx.query.tab && tabList.some((t) => t.id === ctx.query.tab) ? ctx.query.tab : 'summary', boxSide: 'away', open: new Set(), whatIf: null, rvWhatIf: null, rvSide: null };
+    const modelLoad = (football ? loadEP(league) : loadRV()).catch(() => null);
     const tabBar = tabs(tabList, state.tab, (t) => { state.tab = t; drawBody(); }, { label: 'Game sections' });
     ctx.el.append(hero, tabBar, body);
 
@@ -65,6 +68,7 @@ export default {
       else if (state.tab === 'box') drawBox(body, d, state, drawBody);
       else if (state.tab === 'plays') drawPlays(body, d, state, model);
       else if (state.tab === 'epa') chart = drawEPA(body, d, model);
+      else if (state.tab === 'rv') chart = drawRV(body, d, model, state);
       else drawStats(body, d);
     }
     drawAll();
@@ -120,7 +124,7 @@ function drawSummary(el, d, model, state) {
   let chart = null;
   if (d.linescore) el.append(lineScore(d));
   // Live: expected points right under the score. Finished: a what-if tool, after the story of the game.
-  if (g.league !== 'mlb' && g.status.state === 'in') el.append(epSection(d, model, state));
+  if (g.status.state === 'in') el.append(g.league === 'mlb' ? rvSection(d, model, state) : epSection(d, model, state));
 
   if (d.winProb?.length > 1) {
     const r = winProbCard(d);
@@ -138,7 +142,7 @@ function drawSummary(el, d, model, state) {
     })));
   }
 
-  if (g.league !== 'mlb' && g.status.state === 'post') el.append(epSection(d, model, state));
+  if (g.status.state === 'post') el.append(g.league === 'mlb' ? rvSection(d, model, state) : epSection(d, model, state));
 
   if (g.status.state === 'pre') {
     el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'Not started', text: 'Box score, plays and win probability appear once the game starts.' })));
@@ -265,6 +269,7 @@ function drawBox(el, d, state, redraw) {
 function drawPlays(el, d, state, model) {
   const g = d.game;
   const epa = g.league !== 'mlb' ? epaById(d, model) : new Map();
+  const rvPA = g.league === 'mlb' ? rvByPA(d, model) : new Map();
   if (!d.plays?.length) { el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No plays yet', text: 'Play-by-play fills in once the game starts.' }))); return; }
   el.append(h('div', { class: 'card' }, d.plays.map((grp, i) => {
     const key = `${grp.title}-${grp.sub}-${d.plays.length - i}`;
@@ -274,7 +279,9 @@ function drawPlays(el, d, state, model) {
         h('span', { class: 'grow' }, h('div', { class: 'title' }, grp.title, grp.scoring ? h('span', { class: 'badge strong', style: { marginLeft: 'var(--space-2)' } }, 'Score') : null), grp.sub ? h('div', { class: 'sub' }, grp.sub) : null),
         icon(ICONS.chevron)),
       h('div', { class: 'pg-body' }, grp.items.map((p) => h('div', { class: `play-item${p.scoring ? ' scoring' : ''}` },
-        p.meta || epa.has(p.id) ? h('div', { class: 'meta' }, h('span', {}, p.meta), epaChip(epa.get(p.id)?.epa)) : null, h('div', { class: 'txt' }, p.text)))));
+        p.meta || epa.has(p.id) || rvPA.has(p.id) ? h('div', { class: 'meta' }, h('span', {}, p.meta), rvPA.has(p.id) ? rvChip(rvPA.get(p.id).rv) : epaChip(epa.get(p.id)?.epa)) : null,
+        h('div', { class: 'txt' }, p.text),
+        rvPA.has(p.id) ? pitchList(rvPA.get(p.id)) : null))));
     det.addEventListener('toggle', () => { if (det.open) state.open.add(key); else state.open.delete(key); });
     return det;
   })));
