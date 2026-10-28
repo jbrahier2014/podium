@@ -1,6 +1,7 @@
 // Home: featured-team cards (live score, or last result + next game, record,
-// standing, rank; teams with a game soon first), "Worth watching" (see
-// ../data/watch.js), today's games across the in-season leagues, live first, then
+// standing, rank; teams with a game soon first), today's games across the in-season
+// leagues, live first (on busy days the standouts lead as "Worth watching", see
+// ../data/watch.js, and aren't repeated below), then
 // "Did you know?", a different stat each time Home is shown.
 // While any of today's games is live, everything refreshes on the Settings interval.
 
@@ -15,7 +16,10 @@ import { livePoller } from '../util/poller.js';
 import { crest, badge } from '../ui/components.js';
 import { gameCard, resultLine, nextLine } from '../ui/format.js';
 import { installTip } from '../ui/install.js';
-import { worthWatching } from '../data/watch.js';
+import { pickFromGames } from '../data/watch.js';
+
+// A day with at least this many games gets a "Worth watching" group in Today
+const BUSY_DAY = 12;
 import { pageTitle, sectionHeader, emptyState } from './common.js';
 
 export default {
@@ -30,8 +34,6 @@ export default {
     cards.forEach((c) => drawCard(c.el, c.team, null, null));
 
     const today = h('div', {}, h('div', { class: 'game-list' }, h('div', { class: 'skeleton', style: { height: '112px', borderRadius: 'var(--radius-md)' } })));
-    const watch = h('div', {}, h('div', { class: 'game-list' }, h('div', { class: 'skeleton', style: { height: '112px', borderRadius: 'var(--radius-md)' } })));
-    const watchHeader = sectionHeader({ title: 'Worth watching' });
     const dyk = h('div', { class: 'card' }, h('div', { class: 'skeleton', style: { height: '96px' } }));
 
     // Nightly ratings for each featured league: power rank on the cards + the daily outlier
@@ -45,8 +47,6 @@ export default {
       teams.length
         ? scroller
         : h('div', { class: 'notice' }, 'No featured teams yet. ', h('a', { href: '#/settings' }, 'Add teams')),
-      watchHeader,
-      watch,
       sectionHeader({ title: 'Today', action: 'Scoreboard', href: '#/scores' }),
       today,
       sectionHeader({ title: 'Did you know?' }),
@@ -74,24 +74,13 @@ export default {
       const ranked = cards.map((c, i) => ({ c, i, active: isActive(schedules.get(c.team), todayGames[c.team.league], c.team) }))
         .sort((a, b) => Number(b.active) - Number(a.active) || a.i - b.i);
       if (ranked.some((r, n) => scroller.children[n] !== r.c.el)) scroller.append(...ranked.map((r) => r.c.el));
-      drawToday(today, todayGames);
-      drawWatch();
+      const all = Object.values(todayGames).flat();
+      const picks = all.length >= BUSY_DAY ? await pickFromGames(all, { featuredIds, limit: 5 }).catch(() => []) : [];
+      if (!ctx.isCurrent()) return;
+      drawToday(today, todayGames, picks);
     };
 
     const featuredIds = new Set(teams.map((t) => `${t.league}:${t.id}`));
-    let watchToken = 0;
-    const drawWatch = async () => {
-      const my = ++watchToken;
-      let picks;
-      try { picks = await worthWatching({ today: todayGames, featuredIds, limit: 5 }); } catch { picks = []; }
-      if (my !== watchToken || !ctx.isCurrent()) return;
-      clear(watch);
-      if (!picks.length) {
-        watch.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'Nothing standout in the next 24 hours', text: 'Live close games, upsets, ranked matchups and toss-ups show up here.' })));
-        return;
-      }
-      watch.append(h('div', { class: 'game-list' }, picks.map(watchCard)));
-    };
 
     try { todayGames = await getTodayGames(); } catch { todayGames = {}; }
     await Promise.all([...scheduleLoads, ratingLoads]);
@@ -194,19 +183,26 @@ function body(team, sched, live, last, next) {
 }
 
 // ---------------------------------------------------------------- today's games
-function drawToday(el, todayGames) {
+function drawToday(el, todayGames, picks = []) {
   clear(el);
   const leagues = Object.keys(todayGames).filter((l) => todayGames[l].length);
   if (!leagues.length) {
     el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No games today', text: 'The scoreboard has the rest of the week.' })));
     return;
   }
+  // Busy day: the standouts first, and not repeated in the league lists
+  const picked = new Set(picks.map((p) => `${p.game.league}-${p.game.id}`));
+  if (picks.length) {
+    el.append(h('div', { class: 'group-label' }, 'Worth watching'), h('div', { class: 'game-list' }, picks.map(watchCard)));
+  }
   // Leagues with a live game first
   leagues.sort((a, b) => Number(todayGames[b].some((g) => g.status.state === 'in')) - Number(todayGames[a].some((g) => g.status.state === 'in')));
   for (const l of leagues) {
+    const rest = todayGames[l].filter((g) => !picked.has(`${g.league}-${g.id}`));
+    if (!rest.length) continue;
     el.append(
-      h('div', { class: 'group-label' }, LEAGUES[l].name),
-      h('div', { class: 'game-list' }, sortGames(todayGames[l]).map((g) => gameCard(g))));
+      h('div', { class: 'group-label' }, picks.length ? `More ${LEAGUES[l].name}` : LEAGUES[l].name),
+      h('div', { class: 'game-list' }, sortGames(rest).map((g) => gameCard(g))));
   }
 }
 
@@ -306,11 +302,6 @@ function watchCard(pick) {
     h('span', { class: 'lg' }, LEAGUES[pick.game.league].name),
     pick.mine ? badge('Your team', 'podium') : null,
     pick.reasons.length ? h('span', { class: 'why' }, pick.reasons.join(' \u00b7 ')) : null);
-  // Upcoming games beyond today: show the day too
-  if (pick.game.status.state === 'pre' && pick.game.day !== etISODate()) {
-    const b = card.querySelector('.sc-head .badge');
-    if (b) b.textContent = `${etDay(pick.game.start)} \u00b7 ${pick.game.status.detail}`;
-  }
   card.append(why);
   return card;
 }

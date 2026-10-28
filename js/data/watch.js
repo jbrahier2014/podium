@@ -1,5 +1,6 @@
-// "Worth watching": the games most likely to be close, competitive or dramatic,
-// live now or starting in the next 24 hours, across the in-season leagues.
+// "Worth watching": on busy days, the games most likely to be close, competitive
+// or dramatic among today's games. Home shows them at the top of Today and leaves
+// them out of the league lists below, so no game appears twice.
 //
 // Live games score on how close they are (ESPN's live win probability when it has
 // it, otherwise the margin) weighted by how late it is, plus upsets in progress.
@@ -8,26 +9,8 @@
 // college, rating percentiles in the NFL). Postseason baseball always qualifies.
 // Games involving your featured teams are always included and flagged.
 
-import { getScoreboard, getRatings } from './index.js';
-import { inSeason } from '../leagues.js';
+import { getRatings } from './index.js';
 import { pctLabel } from '../util/prob.js';
-import { etISODate } from '../util/time.js';
-
-const DAY = 24 * 3600 * 1000;
-
-/** Live and upcoming (next `days` days) games for NFL and college football. */
-async function footballSlate(league, days) {
-  const now = Date.now();
-  const cur = await getScoreboard(league);
-  let games = cur.games;
-  // Early in the week ESPN's "current" week can still be the one just played
-  if (!games.some((g) => g.status.state !== 'post')) {
-    const weeks = cur.calendar.flatMap((s) => s.weeks);
-    const next = weeks.find((w) => Date.parse(w.start) > now - DAY && !(w.week === cur.week && w.seasonType === cur.seasonType));
-    if (next) games = (await getScoreboard(league, { week: next.week, seasonType: next.seasonType })).games;
-  }
-  return games.filter((g) => g.status.state === 'in' || (g.status.state === 'pre' && Date.parse(g.start) < now + days * DAY && Date.parse(g.start) > now - 6 * 3600_000));
-}
 
 function ratingsIndex(data, league) {
   if (!data?.teams) return null;
@@ -110,35 +93,23 @@ export function interest(g, rx) {
 const ordinalInning = (n) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'} inning`;
 
 /**
- * Picks for Home. today: { league: [games] } already loaded by Home (live/today).
- * Returns [{ game, score, reasons, mine }], live first then by start time.
+ * On busy days, the standouts among today's games for Home's "Worth watching" group.
+ * games: today's games (any league). Only live and upcoming games qualify; your
+ * teams' games are always included. Returns [{ game, score, reasons, mine }],
+ * live first, then by start time.
  */
-export async function worthWatching({ today = {}, featuredIds = new Set(), limit = 6, hours = 24 } = {}) {
-  const leagues = ['nfl', 'cfb', 'mlb'].filter((l) => inSeason(l));
-  const byId = new Map();
-  // Live now, or starting within the next `hours`
-  const soon = Date.now() + hours * 3600_000;
-  const add = (g) => { if (g && (g.status.state === 'in' || (g.status.state === 'pre' && Date.parse(g.start) <= soon))) byId.set(`${g.league}-${g.id}`, g); };
-  Object.values(today).flat().forEach(add);
-  await Promise.all(leagues.filter((l) => l !== 'mlb').map((l) => footballSlate(l, hours / 24).then((gs) => gs.forEach(add)).catch(() => {})));
-  // Baseball: tomorrow's games can fall inside the window too
-  if (leagues.includes('mlb')) {
-    await getScoreboard('mlb', { date: etISODate(new Date(Date.now() + 24 * 3600_000)) }).then((r) => r.games.forEach(add)).catch(() => {});
-  }
-  // Live games from today's scoreboard are fresher than the weekly one
-  Object.values(today).flat().forEach(add);
-
+export async function pickFromGames(games, { featuredIds = new Set(), limit = 5 } = {}) {
+  const open = games.filter((g) => g.status.state === 'in' || g.status.state === 'pre');
+  const leagues = [...new Set(open.map((g) => g.league))].filter((l) => l !== 'mlb');
   const rxs = {};
-  await Promise.all(['nfl', 'cfb'].filter((l) => leagues.includes(l)).map((l) => getRatings(l).then((d) => { rxs[l] = ratingsIndex(d, l); }).catch(() => {})));
-
-  const scored = [...byId.values()].map((g) => {
+  await Promise.all(leagues.map((l) => getRatings(l).then((d) => { rxs[l] = ratingsIndex(d, l); }).catch(() => {})));
+  const scored = open.map((g) => {
     const { score, reasons } = interest(g, rxs[g.league]);
     const mine = featuredIds.has(`${g.league}:${g.home?.team.id}`) || featuredIds.has(`${g.league}:${g.away?.team.id}`);
     return { game: g, score: score + (g.status.state === 'in' ? 20 : 0), reasons, mine };
   });
-  // Your teams' games always make the list; the rest by score
-  const mine = scored.filter((s) => s.mine);
-  const rest = scored.filter((s) => !s.mine && s.score >= 35 && s.reasons.length).sort((a, b) => b.score - a.score);
-  const picks = [...mine, ...rest.slice(0, Math.max(3, limit - mine.length))];
+  const mine = scored.filter((x) => x.mine);
+  const rest = scored.filter((x) => !x.mine && x.score >= 35 && x.reasons.length).sort((a, b) => b.score - a.score);
+  const picks = [...mine, ...rest.slice(0, Math.max(0, limit - mine.length))];
   return picks.sort((a, b) => (a.game.status.state === 'in' ? 0 : 1) - (b.game.status.state === 'in' ? 0 : 1) || Date.parse(a.game.start) - Date.parse(b.game.start));
 }

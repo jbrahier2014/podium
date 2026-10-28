@@ -144,7 +144,7 @@ def compute(season: int, full: bool, log) -> dict:
         if last_week and wk != last_week:
             snapshot(prev_day_label)
         last_week = wk
-        prev_day_label = f"{dd.day} {MONTHS[dd.month - 1]}"
+        prev_day_label = f"{MONTHS[dd.month - 1]} {dd.day}"
         for me, opp, rs, ra in ((h, a, hs, as_), (a, h, as_, hs)):
             won = rs > ra
             months[me][MONTHS[dd.month - 1]][0 if won else 1] += 1

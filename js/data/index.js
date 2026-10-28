@@ -33,6 +33,7 @@
 
 import * as espn from './providers/espn.js';
 import * as mlb from './providers/mlb.js';
+import { monthDay } from '../util/time.js';
 import { cachedJSON } from '../store/cache.js';
 import { inSeason, seasonYear } from '../leagues.js';
 import { etISODate } from '../util/time.js';
@@ -161,7 +162,8 @@ export async function getRatings(league, season) {
     season = meta?.leagues?.[league]?.current ?? seasonYear(league);
   }
   const { data } = await getComputed(`${league}/${season}.json`, { ttlMs: 30 * 60_000, final: (d) => !!d?.final });
-  return data;
+  // Dates read Month Date in the app, whatever the file says
+  return data ? { ...data, asOf: monthDay(data.asOf), histLabels: (data.histLabels || []).map(monthDay) } : data;
 }
 
 /** Seasons with nightly data for a league, newest first. */

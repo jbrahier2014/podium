@@ -15,6 +15,7 @@ import { STATS, fmt, percentiles, ordinal, SCOPE } from '../data/statdefs.js';
 import { crest, tabs, chips, statBar, percentileRow, sparkline, emptyState } from '../ui/components.js';
 import { pageTitle, leagueTabs, defaultLeague } from './common.js';
 import { navigate } from '../router.js';
+import { monthDay } from '../util/time.js';
 
 const TOOLS = [
   { id: 'leaders', label: 'Leaders' },
@@ -422,13 +423,13 @@ const TREND_METRICS = {
   ],
   mlb: [
     { id: 'rd', label: 'Run differential per game', unit: 'games', windows: [10, 20, 30], available: (d) => d.teams.some((t) => t.log?.length),
-      points: (t, d, n) => { const g = t.log || []; const r = rolling(g.map((x) => x[2] - x[3]), n); return g.map((x, i) => ({ label: x[0].slice(5), y: r[i] })); },
+      points: (t, d, n) => { const g = t.log || []; const r = rolling(g.map((x) => x[2] - x[3]), n); return g.map((x, i) => ({ label: monthDay(x[0]), y: r[i] })); },
       format: (v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(1)}`, note: (n) => `Runs scored minus allowed per game, rolling ${n} games.` },
     { id: 'rs', label: 'Runs scored per game', unit: 'games', windows: [10, 20, 30], available: (d) => d.teams.some((t) => t.log?.length),
-      points: (t, d, n) => { const g = t.log || []; const r = rolling(g.map((x) => x[2]), n); return g.map((x, i) => ({ label: x[0].slice(5), y: r[i] })); },
+      points: (t, d, n) => { const g = t.log || []; const r = rolling(g.map((x) => x[2]), n); return g.map((x, i) => ({ label: monthDay(x[0]), y: r[i] })); },
       format: (v) => Number(v).toFixed(1), note: (n) => `Runs per game, rolling ${n} games.` },
     { id: 'ra', label: 'Runs allowed per game', unit: 'games', windows: [10, 20, 30], lowerIsBetter: true, available: (d) => d.teams.some((t) => t.log?.length),
-      points: (t, d, n) => { const g = t.log || []; const r = rolling(g.map((x) => x[3]), n); return g.map((x, i) => ({ label: x[0].slice(5), y: r[i] })); },
+      points: (t, d, n) => { const g = t.log || []; const r = rolling(g.map((x) => x[3]), n); return g.map((x, i) => ({ label: monthDay(x[0]), y: r[i] })); },
       format: (v) => Number(v).toFixed(1), note: (n) => `Runs allowed per game, rolling ${n} games. Axis flipped so up is better.` },
     histMetric('pyth', 'Pythagorean win % (season to date)', 0, (v) => Number(v).toFixed(3).replace(/^0/, ''), 'Pythagorean win % from runs scored and allowed to date, weekly.'),
   ],

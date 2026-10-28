@@ -83,12 +83,12 @@ export function resultLine(g, teamId) {
   return { outcome, text: `${me.score}–${opp.score} ${where} ${opp.team.short || opp.team.name}` };
 }
 
-/** "Today 4:25 PM vs Packers" / "Sat 31 Oct 12:00 PM at Navy". */
+/** "Today, 4:25 PM vs Packers" / "Sat, Oct 31, 12:00 PM at Navy". */
 export function nextLine(g, teamId) {
   const me = g.home.team.id === String(teamId) ? g.home : g.away;
   const opp = me === g.home ? g.away : g.home;
   const where = g.neutral ? 'vs' : me === g.home ? 'vs' : 'at';
   const when = g.day === etISODate() ? 'Today' : etDay(g.start);
   const time = g.status.detail === 'TBD' ? 'TBD' : etTime(g.start);
-  return `${when} ${time} ${where} ${opp.team.short || opp.team.name}`;
+  return `${when}, ${time} ${where} ${opp.team.short || opp.team.name}`;
 }

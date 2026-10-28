@@ -2,7 +2,7 @@
 // from this device. If one fails, this screen says so.
 
 import { h, clear } from '../util/dom.js';
-import { etISODate } from '../util/time.js';
+import { etISODate, etDay, etTime, monthDay } from '../util/time.js';
 import { badge, button } from '../ui/components.js';
 import { pageTitle } from './common.js';
 
@@ -16,7 +16,7 @@ const CHECKS = [
   { name: 'Team lists (this site)', url: () => 'data/teams/cfb.json',
     read: (j) => `${j.teams?.length ?? 0} FBS teams saved by the GitHub Action` },
   { name: 'Nightly stats (this site)', url: () => 'data/meta.json',
-    read: (j) => (j.generatedAt ? `Last run ${new Date(j.generatedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} ET` : 'Not generated yet') },
+    read: (j) => (j.generatedAt ? `Last run ${etDay(j.generatedAt)}, ${etTime(j.generatedAt)} ET` : 'Not generated yet') },
 ];
 
 const JOB_SOURCES = {
@@ -57,7 +57,7 @@ export default {
         const problems = [...(m.errors || []), ...Object.entries(m.status || {}).filter(([k, v]) => src.keys[k] && v !== 'ok').map(([k, v]) => `${src.keys[k]}: ${v}`)];
         rows.push(h('div', { class: 'list-item' },
           h('span', { class: 'grow' }, h('div', { class: 'title' }, src.name),
-            h('div', { class: 'sub' }, problems.length ? problems.join(' \u00b7 ') : `Through ${m.asOf || '\u2013'} \u00b7 seasons ${(m.seasons || []).join(', ')}`)),
+            h('div', { class: 'sub' }, problems.length ? problems.join(' \u00b7 ') : `Through ${monthDay(m.asOf) || '\u2013'} \u00b7 seasons ${(m.seasons || []).join(', ')}`)),
           problems.length ? badge('Problem', 'strong') : badge('OK', 'win')));
       }
       for (const [lg, name] of [['nfl', 'Expected points model, NFL (nflverse)'], ['cfb', 'Expected points model, college (cfbfastR)']]) {
