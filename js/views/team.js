@@ -2,6 +2,7 @@
 // an Advanced tab (advanced stats and the percentile fingerprint arrive with the
 // nightly stats in phase 5).
 
+import { pctLabel100 } from '../util/prob.js';
 import { h, icon, ICONS, toast, clear } from '../util/dom.js';
 import { settings } from '../store/settings.js';
 import { getTeams, getTeamSchedule, getRoster, getStandings, getTeamStats, getRatings, getRatingSeasons } from '../data/index.js';
@@ -245,7 +246,7 @@ function advancedContent(league, id, team, data) {
   if (!me) return [h('div', { class: 'card' }, emptyState({ iconName: 'scatter', title: 'No advanced stats for this team', text: `Not in the ${data.season} ${LEAGUES[league].name} data.` }))];
   const defs = STATS[league];
   const out = [];
-  const showOdds = (v) => (v == null ? null : v >= 99.95 ? '>99.9%' : v > 0 && v < 0.1 ? '<0.1%' : `${v.toFixed(1)}%`);
+  const showOdds = (v) => (v == null ? null : pctLabel100(v, 1));
 
   // Summary
   const rows = SUMMARY[league].map(([k, label, f, rankKey]) => {

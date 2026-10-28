@@ -194,6 +194,24 @@ const TOOL_RENDER = {
     const mx = median(pts.map((p) => p.x)); const my = median(pts.map((p) => p.y));
     const flipped = [dx.hib === false ? 'x' : null, dy.hib === false ? 'y' : null].filter(Boolean);
 
+    // Tap a dot to select it (ring + details below); the details link opens the team.
+    let selected = null;
+    const pctX = percentiles(data.teams, dx); const pctY = percentiles(data.teams, dy);
+    const panel = h('div', { class: 'scatter-pick', 'aria-live': 'polite' });
+    const drawPanel = () => {
+      clear(panel);
+      if (!selected) { panel.append(h('span', { class: 't-caption' }, 'Tap a dot to see the team.')); return; }
+      const p = selected; const rx = pctX.get(p.t.id); const ry = pctY.get(p.t.id);
+      const name = (d) => (dx.short === dy.short ? d.label : d.short);
+      const val = (d, v, r) => h('div', { class: 'sp-val' }, h('span', { class: 'k' }, name(d)), h('span', { class: 'v' }, fmt(v, d.fmt)), r && d.hib != null ? h('span', { class: 'r' }, ordinal(r.rank)) : null);
+      panel.append(
+        crest(p.id, 'sm'),
+        h('div', { class: 'sp-name' }, h('div', { class: 'nm' }, p.id.short), p.t.record ? h('div', { class: 't-caption' }, p.t.record) : null),
+        val(dx, p.x, rx), val(dy, p.y, ry),
+        h('a', { class: 'btn ghost sp-open', href: `#/team/${league}/${p.t.id}?tab=advanced` }, 'Open'));
+    };
+    drawPanel();
+
     requestAnimationFrame(() => {
       if (!canvas.isConnected || !window.Chart) return;
       const ink = cssVar('--ink'); const muted = cssVar('--ink-muted'); const line = cssVar('--line'); const strong = cssVar('--line-strong');
@@ -212,6 +230,18 @@ const TOOL_RENDER = {
           const meta = c.getDatasetMeta(1); const g = c.ctx;
           g.save(); g.font = '600 11px Inter'; g.fillStyle = ink; g.textBaseline = 'middle';
           meta.data.forEach((el, i) => { const p = mine[i]; if (p) g.fillText(p.id.abbr, el.x + 7, el.y); });
+          // The selected dot: ring and name
+          if (selected) {
+            const ds = featured.has(selected.t.id) ? 1 : 0;
+            const el = c.getDatasetMeta(ds).data[(ds ? mine : rest).indexOf(selected)];
+            if (el) {
+              g.strokeStyle = podium; g.lineWidth = 2; g.beginPath(); g.arc(el.x, el.y, 10, 0, Math.PI * 2); g.stroke();
+              g.font = '700 12px Inter'; g.fillStyle = ink;
+              const w = g.measureText(selected.id.abbr).width;
+              const tx = el.x + 14 + w > c.chartArea.right ? el.x - 14 - w : el.x + 14;
+              g.fillText(selected.id.abbr, tx, el.y - 12);
+            }
+          }
           g.restore();
         },
       };
@@ -231,14 +261,21 @@ const TOOL_RENDER = {
           },
           plugins: {
             legend: { display: false },
-            tooltip: { backgroundColor: surface, borderColor: line, borderWidth: 1, titleColor: ink, bodyColor: muted, displayColors: false, padding: 8, cornerRadius: 4,
+            // Hover tooltips with a mouse; on a phone the tap selection does the job
+            tooltip: { enabled: matchMedia('(hover: hover)').matches, backgroundColor: surface, borderColor: line, borderWidth: 1, titleColor: ink, bodyColor: muted, displayColors: false, padding: 8, cornerRadius: 4,
               titleFont: { family: 'Inter', size: 12, weight: '600' }, bodyFont: { family: 'Inter', size: 11 },
               callbacks: { title: (items) => items[0].raw.id.short, label: (it) => [`${dx.short}: ${fmt(it.raw.x, dx.fmt)}`, `${dy.short}: ${fmt(it.raw.y, dy.fmt)}`] } },
           },
-          onClick: (_, els) => {
-            if (!els.length) return;
-            const ds = els[0].datasetIndex === 1 ? mine : rest;
-            navigate(`team/${league}/${ds[els[0].index].t.id}?tab=advanced`);
+          onClick: (evt, _, c) => {
+            // Nearest dot within a fingertip (24px); tapping empty space clears
+            const near = c.getElementsAtEventForMode(evt, 'nearest', { intersect: false }, false)[0];
+            let pick = null;
+            if (near) {
+              const dist = Math.hypot(near.element.x - evt.x, near.element.y - evt.y);
+              if (dist <= 24) pick = (near.datasetIndex === 1 ? mine : rest)[near.index];
+            }
+            selected = pick && pick !== selected ? pick : null;
+            drawPanel(); c.draw();
           },
         },
       });
@@ -252,12 +289,13 @@ const TOOL_RENDER = {
         field('Y axis', statSelect(league, dy.key, (k) => { setQuery({ y: k }); env.redraw(); }, { label: 'Y axis' }))),
       h('div', { class: 'card card-pad' },
         h('div', { class: 'scatter-wrap' }, canvas),
+        panel,
         h('div', { class: 'scatter-legend' },
           h('span', {}, h('i', { class: 'sw sw-mine' }), 'Your teams'),
           h('span', {}, h('i', { class: 'sw sw-rest' }), 'Others'),
           h('span', {}, h('i', { class: 'sw sw-med' }), 'League median'),
           swap)),
-      h('p', { class: 'footnote' }, `${pts.length} teams. Tap a dot to open the team.${flipped.length ? ` ${flipped.map((a) => a.toUpperCase()).join(' and ')} axis flipped so up and right are better.` : ''}`),
+      h('p', { class: 'footnote' }, `${pts.length} teams. Tap a dot to see who it is; tap Open for the team page.${flipped.length ? ` ${flipped.map((a) => a.toUpperCase()).join(' and ')} axis flipped so up and right are better.` : ''}`),
     ];
   },
 

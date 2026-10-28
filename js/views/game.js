@@ -2,6 +2,7 @@
 // win probability, scoring summary, game info), box score, play-by-play and
 // team stat comparison. Refreshes on the Settings interval while the game is live.
 
+import { pctLabel100 } from '../util/prob.js';
 import { h, clear, icon, ICONS } from '../util/dom.js';
 import { LEAGUES } from '../leagues.js';
 import { settings } from '../store/settings.js';
@@ -171,13 +172,13 @@ function winProbCard(d) {
   const last = pts[pts.length - 1];
   const homeLeads = last.home >= 50;
   const leader = homeLeads ? g.home.team : g.away.team;
-  const pct = Math.round(homeLeads ? last.home : 100 - last.home);
+  const pct = pctLabel100(homeLeads ? last.home : 100 - last.home);
   const final = g.status.state === 'post';
 
-  const canvas = h('canvas', { role: 'img', 'aria-label': `Win probability chart. ${leader.short || leader.name} ${final ? 'won' : `${pct}% to win`}.` });
+  const canvas = h('canvas', { role: 'img', 'aria-label': `Win probability chart. ${leader.short || leader.name} ${final ? 'won' : `${pct} to win`}.` });
   const el = h('div', { class: 'card wp-card' },
     h('div', { class: 'wp-head' },
-      h('span', { class: 'wp-now' }, final ? leader.abbr : `${pct}%`, h('span', { class: 'who' }, final ? 'won' : `${leader.short || leader.name} to win`)),
+      h('span', { class: 'wp-now' }, final ? leader.abbr : pct, h('span', { class: 'who' }, final ? 'won' : `${leader.short || leader.name} to win`)),
       h('span', { class: 't-caption' }, `Top: ${g.home.team.abbr} · Bottom: ${g.away.team.abbr}`)),
     h('div', { class: 'wp-canvas' }, canvas));
 
@@ -230,7 +231,7 @@ function winProbCard(d) {
           displayColors: false, padding: 8, cornerRadius: 4,
           callbacks: {
             title: (items) => items[0]?.raw?.label || '',
-            label: (item) => { const y = item.raw.y; return y >= 50 ? `${g.home.team.abbr} ${Math.round(y)}%` : `${g.away.team.abbr} ${Math.round(100 - y)}%`; },
+            label: (item) => { const y = item.raw.y; return y >= 50 ? `${g.home.team.abbr} ${pctLabel100(y)}` : `${g.away.team.abbr} ${pctLabel100(100 - y)}`; },
           },
         },
       },

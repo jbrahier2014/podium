@@ -2,6 +2,7 @@
 // matchup predictor, and (college) a link to Sagarin for comparison.
 // Numbers come from the nightly job (data/<league>/<season>.json).
 
+import { pctLabel, pctLabel100 } from '../util/prob.js';
 import { h, clear } from '../util/dom.js';
 import { LEAGUES } from '../leagues.js';
 import { settings } from '../store/settings.js';
@@ -65,7 +66,7 @@ export function pythPct(t) {
   const g = (t.v.pyth_w ?? 0) + (t.v.pyth_l ?? 0);
   return g ? t.v.pyth_w / g : null;
 }
-const show = (v, f) => (f === 'odds' ? (v == null ? '–' : v >= 99.95 ? '>99.9%' : v > 0 && v < 0.1 ? '<0.1%' : `${v.toFixed(1)}%`) : fmt(v, f));
+const show = (v, f) => (f === 'odds' ? pctLabel100(v, 1) : fmt(v, f));
 
 export default {
   async render(ctx) {
@@ -196,8 +197,8 @@ function matchupCard(league, data, teams, featured) {
     const half = line == null ? null : Math.round(Math.abs(line) * 2) / 2;
     clear(out);
     out.append(
-      h('span', { class: 'mu-line' }, line == null ? `${fav.info.short} ${Math.round(p * 100)}%` : half === 0 ? 'Pick’em' : `${fav.info.short} by ${half}`),
-      h('span', { class: 'mu-prob' }, line == null ? 'to win' : `${Math.round(p * 100)}% to win`));
+      h('span', { class: 'mu-line' }, line == null ? `${fav.info.short} ${pctLabel(p)}` : half === 0 ? 'Pick’em' : `${fav.info.short} by ${half}`),
+      h('span', { class: 'mu-prob' }, line == null ? 'to win' : `${pctLabel(p)} to win`));
   };
   [selA, selB, venue].forEach((s) => s.addEventListener('change', update));
   update();

@@ -97,6 +97,8 @@ export function normalizeGame(g) {
     home: side(g, 'home', postseason),
     away: side(g, 'away', postseason),
     neutral: false,
+    postseason,
+    inning: ls.currentInning ?? null,
     venue: g.venue?.name || null,
     broadcast: [...new Set(tv)].join(', ') || null,
     note: postseason && series ? `${series.shortDescription}${series.result ? ` · ${series.result}` : ''}` : (g.doubleHeader !== 'N' ? `Game ${g.gameNumber} of doubleheader` : null),

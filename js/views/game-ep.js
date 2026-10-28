@@ -2,6 +2,7 @@
 // draggable what-if field, the 4th-down call, per-play EPA and the EPA tab.
 // Math lives in ../data/ep.js; this file only draws.
 
+import { pctLabel } from '../util/prob.js';
 import { h, clear } from '../util/dom.js';
 import { epValue, fourthDown, annotate, summarize, halfSeconds, scoreable } from '../data/ep.js';
 import { crest, badge, statBar, emptyState } from '../ui/components.js';
@@ -192,7 +193,7 @@ function fourthCard(model, s, off) {
   const opts = [['go', r.go], ['fg', r.fg], ['punt', r.punt]].filter(([, o]) => o);
   const vals = opts.map(([, o]) => o.ev);
   const lo = Math.min(0, ...vals); const hi = Math.max(0.5, ...vals);
-  const pct = (v) => `${Math.round(v * 100)}%`;
+  const pct = (v) => pctLabel(v);
   const detail = (k, o) => (k === 'go' ? `${pct(o.p)} to convert` : k === 'fg' ? `${pct(o.p)} from ${o.distance} yards` : 'Opponent takes over');
   const rows = opts.map(([k, o]) => h('div', { class: `fd-row${k === r.best ? ' best' : ''}` },
     h('div', { class: 'fd-name' }, h('div', {}, label[k]), h('div', { class: 't-caption' }, detail(k, o))),

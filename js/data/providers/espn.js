@@ -136,6 +136,10 @@ export function normalizeEvent(league, ev, idx) {
     note: comp.notes?.[0]?.headline || null,
     week: ev.week?.number ?? null,
     seasonType: ev.season?.type ?? ev.seasonType?.type ?? null,
+    odds: parseOdds(comp.odds?.[0], home, away),
+    // Live win probability for the home team (0..1), when ESPN has it
+    winProbHome: status.state === 'in' && sit?.lastPlay?.probability?.homeWinPercentage != null ? Number(sit.lastPlay.probability.homeWinPercentage) : null,
+    postseason: Number(ev.season?.type ?? ev.seasonType?.type) === 3,
     situation: status.state === 'in' && sit ? {
       possession: sit.possession ? String(sit.possession) : null,
       downDistance: sit.downDistanceText || null,
@@ -143,6 +147,20 @@ export function normalizeEvent(league, ev, idx) {
       lastPlay: sit.lastPlay?.text || null,
     } : null,
   };
+}
+
+/**
+ * Betting line from ESPN's scoreboard ("MIA -7.5", "EVEN"):
+ * { favorite: teamId|null, line: points (>= 0), total, text }.
+ */
+function parseOdds(o, home, away) {
+  if (!o?.details) return null;
+  const text = String(o.details).trim();
+  if (/^even|pk|pick/i.test(text)) return { favorite: null, line: 0, total: o.overUnder ?? null, text: 'Pick\u2019em' };
+  const m = text.match(/^([A-Z0-9&]+)\s+(-?\d+(?:\.\d+)?)$/i);
+  if (!m) return null;
+  const byAbbr = [home, away].find((c) => c?.team?.abbreviation === m[1]);
+  return { favorite: byAbbr ? String(byAbbr.team.id) : null, line: Math.abs(Number(m[2])), total: o.overUnder ?? null, text };
 }
 
 // ---------------------------------------------------------------- scoreboard

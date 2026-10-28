@@ -883,3 +883,19 @@ table.stats td.team .st-name { min-width: 0; overflow: hidden; text-overflow: el
 .other-row + .other-row { border-top: 1px solid var(--line); }
 .footnote.dropped strong { color: var(--ink); font-weight: 600; }
 .chip:disabled { opacity: 0.4; cursor: default; }
+
+/* Phones: no double-tap zoom (taps respond immediately); pinch-to-zoom still works. */
+:where(*) { touch-action: manipulation; }
+.scatter-pick { display: flex; align-items: center; gap: var(--space-3); min-height: 52px; margin-top: var(--space-3); padding: var(--space-2) var(--space-3); background: var(--surface-sunken); }
+.scatter-pick .sp-name { flex: 1; min-width: 64px; }
+.scatter-pick .nm { font: 600 15px/20px var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scatter-pick .sp-val { display: flex; flex-direction: column; align-items: flex-end; flex: 0 1 84px; min-width: 48px; }
+.scatter-pick .sp-val .k { font: 700 9px/11px var(--font-display); letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-muted); text-align: right; }
+.scatter-pick .sp-val .v { font: 700 15px/20px var(--font-display); font-variant-numeric: tabular-nums; }
+.scatter-pick .sp-val .r { font: 500 11px/14px var(--font-sans); color: var(--ink-muted); }
+.scatter-pick .sp-open { height: var(--control-sm); padding: 0 var(--space-3); border: 1px solid var(--line-strong); flex: none; }
+
+/* ---------- Worth watching ---------- */
+.watch-why { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-4) var(--space-3); border-top: 1px solid var(--line); }
+.watch-why .lg { font: 700 11px/16px var(--font-display); letter-spacing: 1px; text-transform: uppercase; color: var(--ink-muted); }
+.watch-why .why { flex-basis: 100%; font: 600 13px/18px var(--font-sans); color: var(--ink); }
