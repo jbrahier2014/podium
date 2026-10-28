@@ -931,3 +931,11 @@ table.stats td.team .st-name { min-width: 0; overflow: hidden; text-overflow: el
 .rv-pv { text-align: right; flex: none; }
 .rv-pv .v { font: 700 16px/20px var(--font-display); font-variant-numeric: tabular-nums; }
 .rv-zones table.stats th, .rv-zones table.stats td { padding-left: var(--space-2); padding-right: var(--space-2); }
+
+/* Zero-centered comparison (values that can be negative) */
+.statbar.signed .sgb-track { position: relative; height: 13px; }
+.statbar.signed .sgb-zero { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--ink-muted); }
+.statbar.signed .sgb-bar { position: absolute; height: 5px; background: var(--line-strong); }
+.statbar.signed .sgb-bar.a { top: 0; }
+.statbar.signed .sgb-bar.b { bottom: 0; }
+.statbar.signed .sgb-bar.lead { background: var(--podium); }

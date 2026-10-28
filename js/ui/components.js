@@ -194,6 +194,30 @@ export function statBar({ label, home, away, format = (v) => v, lowerIsBetter = 
       h('span', { class: `sb-seg${awayLeads ? ' lead' : ''}`, style: { flex: String(Math.abs(away) / total || 0.5) } })));
 }
 
+/**
+ * Comparison for values that can be negative (run value, EPA): both teams on one
+ * zero-centered scale. Each team gets a thin bar from the zero line, right for
+ * positive and left for negative; the better side is violet.
+ * a = left team (away), b = right team (home).
+ */
+export function signedBar({ label, a, b, display, lowerIsBetter = false }) {
+  const va = Number(a) || 0; const vb = Number(b) || 0;
+  const max = Math.max(Math.abs(va), Math.abs(vb)) || 1;
+  const aLeads = lowerIsBetter ? va < vb : va > vb;
+  const bLeads = lowerIsBetter ? vb < va : vb > va;
+  const bar = (v, lead, cls) => {
+    const w = (50 * Math.abs(v)) / max;
+    return h('span', { class: `sgb-bar ${cls}${lead ? ' lead' : ''}`, style: { left: `${v >= 0 ? 50 : 50 - w}%`, width: `${Math.max(w, v ? 0.8 : 0)}%` } });
+  };
+  return h('div', { class: 'statbar signed' },
+    h('div', { class: 'sb-labels' },
+      h('span', { class: `sb-val${aLeads ? '' : ' trail'}` }, display ? display[0] : String(va)),
+      h('span', { class: 'sb-name' }, label),
+      h('span', { class: `sb-val${bLeads ? '' : ' trail'}` }, display ? display[1] : String(vb))),
+    h('div', { class: 'sgb-track', 'aria-hidden': 'true' },
+      h('span', { class: 'sgb-zero' }), bar(va, aLeads, 'a'), bar(vb, bLeads, 'b')));
+}
+
 // ---------------------------------------------------------------- StandingsTable
 /**
  * columns: [{ key, label, format? }]

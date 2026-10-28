@@ -5,7 +5,7 @@
 import { pctLabel } from '../util/prob.js';
 import { h, clear } from '../util/dom.js';
 import { epValue, fourthDown, annotate, summarize, halfSeconds, scoreable } from '../data/ep.js';
-import { crest, badge, statBar, emptyState } from '../ui/components.js';
+import { crest, badge, statBar, signedBar, emptyState } from '../ui/components.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => {
@@ -224,16 +224,15 @@ export function drawEPA(el, d, model) {
   const n2 = (v) => (v == null ? '–' : `${v >= 0 ? '' : MINUS}${Math.abs(v).toFixed(2)}`);
   const p0 = (v) => (v == null ? '–' : `${Math.round(v * 100)}%`);
   // statBar shows shares: put both on a common non-negative scale
-  const share = (a, b) => { const lo = Math.min(a ?? 0, b ?? 0, 0); return [(a ?? 0) - lo + 0.001, (b ?? 0) - lo + 0.001]; };
-  const bar = (label, a, b, f) => { const [x, y] = share(a, b); return statBar({ label, home: x, away: y, display: [f(a), f(b)] }); };
+  const bar = (label, a, b, f) => signedBar({ label, a, b, display: [f(a), f(b)] });
 
   el.append(h('div', { class: 'card stat-compare' },
     h('div', { class: 'sc-teams' }, h('span', {}, crest(g.away.team, 'sm'), g.away.team.abbr), h('span', {}, g.home.team.abbr, crest(g.home.team, 'sm'))),
     bar('EPA per play', A.perPlay, B.perPlay, n2),
     bar('Pass EPA per play', A.pass, B.pass, n2),
     bar('Rush EPA per play', A.rush, B.rush, n2),
-    bar('Success rate', A.success, B.success, p0),
-    bar('Big plays (EPA 2+)', A.explosive, B.explosive, (v) => String(v ?? 0)),
+    statBar({ label: 'Success rate', home: A.success ?? 0, away: B.success ?? 0, display: [p0(A.success), p0(B.success)] }),
+    statBar({ label: 'Big plays (EPA 2+)', home: A.explosive ?? 0, away: B.explosive ?? 0, display: [String(A.explosive ?? 0), String(B.explosive ?? 0)] }),
     bar('Total EPA', A.total, B.total, (v) => fmtEPA(v) || '0.0')));
 
   // Running total

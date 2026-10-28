@@ -7,8 +7,10 @@ Method (the Statcast approach)
   Run expectancy RE(state) = average runs the batting team scores from that point to
   the end of the half-inning, for each of the 288 states: 8 base states x 3 outs x
   12 counts. A pitch's run value = RE(after) - RE(before) + runs scored on the pitch,
-  for the batting team (the pitcher gets the negative). This is Statcast's
-  delta_run_exp; the job checks its table against Savant's own per-pitch values.
+  for the batting team (the pitcher gets the negative): the classic Statcast
+  definition. Savant's current delta_run_exp column uses a different, unpublished
+  formula (it doesn't sum to runs scored), so the job logs agreement with it only
+  as a diagnostic.
 
   Data: Statcast pitch-by-pitch from Baseball Savant's search CSV, for a sample of
   regular-season dates (12 three-day windows across the season, about 150,000
@@ -101,7 +103,7 @@ def fit(df: pd.DataFrame, log):
     resid = v.delta_run_exp - v.mine
     r2 = 1 - resid.var() / v.delta_run_exp.var() if len(v) > 1000 else None
     mae = float(resid.abs().mean()) if len(v) else None
-    log(f"rv: matches Savant delta_run_exp with R² {r2:.3f}, MAE {mae:.4f}" if r2 is not None else "rv: no Savant values to check against")
+    log(f"rv: agreement with Savant delta_run_exp (different formula) R² {r2:.3f}, MAE {mae:.4f}" if r2 is not None else "rv: no Savant values to check against")
     return re, cnt, r2, mae, int(len(d))
 
 

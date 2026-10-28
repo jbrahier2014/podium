@@ -64,7 +64,7 @@ export default {
         const e = meta.rv;
         rows.push(h('div', { class: 'list-item' },
           h('span', { class: 'grow' }, h('div', { class: 'title' }, 'Run expectancy, MLB (Statcast)'),
-            h('div', { class: 'sub' }, e.ok ? `${e.season ? `${e.season} season \u00b7 ` : ''}Built ${String(e.fitted || '').slice(0, 10)}${e.r2 != null ? ` \u00b7 matches Savant\u2019s per-pitch values, R\u00b2 ${e.r2}` : ''}` : `${e.error || 'Not built yet'}`.slice(0, 300))),
+            h('div', { class: 'sub' }, e.ok ? `${e.season ? `${e.season} season \u00b7 ` : ''}Built ${String(e.fitted || '').slice(0, 10)}${e.n ? ` \u00b7 ${Number(e.n).toLocaleString()} pitches` : ''}` : `${e.error || 'Not built yet'}`.slice(0, 300))),
           e.ok ? badge('OK', 'win') : badge('Problem', 'strong')));
       }
       for (const [lg, name] of [['nfl', 'Expected points model, NFL (nflverse)'], ['cfb', 'Expected points model, college (cfbfastR)']]) {

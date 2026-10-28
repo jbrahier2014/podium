@@ -4,7 +4,7 @@
 
 import { h, clear } from '../util/dom.js';
 import { annotate, summarize, byPlateAppearance, reValue, ZONES } from '../data/rv.js';
-import { crest, badge, chips, statBar, emptyState } from '../ui/components.js';
+import { crest, badge, chips, statBar, signedBar, emptyState } from '../ui/components.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => {
@@ -130,8 +130,7 @@ export function drawRV(el, d, m, state) {
   const sum = summarize(rows, g);
   const A = sum.batting[g.away.team.id]; const B = sum.batting[g.home.team.id];
   const n2 = (v) => fmtRV(v ?? 0);
-  const share = (a, b) => { const lo = Math.min(a ?? 0, b ?? 0, 0); return [(a ?? 0) - lo + 0.001, (b ?? 0) - lo + 0.001]; };
-  const bar = (label, a, b, f = n2) => { const [x, y] = share(a, b); return statBar({ label, home: x, away: y, display: [f(a), f(b)] }); };
+  const bar = (label, a, b, f = n2) => signedBar({ label, a, b, display: [f(a), f(b)] });
   el.append(h('div', { class: 'group-label' }, 'At the plate'), h('div', { class: 'card stat-compare' },
     h('div', { class: 'sc-teams' }, h('span', {}, crest(g.away.team, 'sm'), g.away.team.abbr), h('span', {}, g.home.team.abbr, crest(g.home.team, 'sm'))),
     bar('Batting run value', A.rv, B.rv),
@@ -196,6 +195,6 @@ export function drawRV(el, d, m, state) {
       h('div', { class: 't-caption' }, `${r.half === 'top' ? 'Top' : 'Bot'} ${r.inning} · ${r.outsBefore} out · ${r.countBefore} · ${r.batter.name} vs ${r.pitcher.name}`),
       h('div', { class: 'bp-text' }, [r.pitchName, r.speed ? `${Math.round(r.speed)} mph` : null, r.event || r.call].filter(Boolean).join(' · '))),
     rvChip(r.rv)))));
-  el.append(h('p', { class: 'footnote' }, `Run value = change in run expectancy (bases, outs and count) plus runs scored, for the batting team: Statcast’s per-pitch run value. ${m.isDefault ? 'Using a standard run-expectancy table until the nightly job builds one from Statcast.' : `Run expectancy from ${m.season} Statcast${m.r2 != null ? ` (matches Savant’s per-pitch values, R² ${Number(m.r2).toFixed(2)})` : ''}.`}`));
+  el.append(h('p', { class: 'footnote' }, `Run value = change in run expectancy (bases, outs and count) plus runs scored, for the batting team (the classic Statcast definition; Savant’s current per-pitch numbers use a different formula). ${m.isDefault ? 'Using a standard run-expectancy table until the nightly job builds one from Statcast.' : `Run expectancy built from ${m.n ? `${Number(m.n).toLocaleString()} ` : ''}${m.season} Statcast pitches.`}`));
   return chart;
 }
