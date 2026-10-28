@@ -195,27 +195,26 @@ export function statBar({ label, home, away, format = (v) => v, lowerIsBetter = 
 }
 
 /**
- * Comparison for values that can be negative (run value, EPA): both teams on one
- * zero-centered scale. Each team gets a thin bar from the zero line, right for
- * positive and left for negative; the better side is violet.
- * a = left team (away), b = right team (home).
+ * Tug-of-war comparison for values that can be negative or near zero (run value, EPA).
+ * One shared track: equal values split it 50/50, and the better team's share grows
+ * with the gap, measured against `scale` (a decisive difference for this stat, e.g.
+ * 3 runs). The gap, not the raw sizes, drives the split, so two similar negative
+ * numbers stay close to even. a = left team, b = right team.
  */
-export function signedBar({ label, a, b, display, lowerIsBetter = false }) {
+export function edgeBar({ label, a, b, display, scale = 1, lowerIsBetter = false }) {
   const va = Number(a) || 0; const vb = Number(b) || 0;
-  const max = Math.max(Math.abs(va), Math.abs(vb)) || 1;
-  const aLeads = lowerIsBetter ? va < vb : va > vb;
-  const bLeads = lowerIsBetter ? vb < va : vb > va;
-  const bar = (v, lead, cls) => {
-    const w = (50 * Math.abs(v)) / max;
-    return h('span', { class: `sgb-bar ${cls}${lead ? ' lead' : ''}`, style: { left: `${v >= 0 ? 50 : 50 - w}%`, width: `${Math.max(w, v ? 0.8 : 0)}%` } });
-  };
-  return h('div', { class: 'statbar signed' },
+  const edge = (lowerIsBetter ? vb - va : va - vb) / scale; // + favours the left team
+  const left = 50 + 50 * Math.max(-1, Math.min(1, edge));
+  const aLeads = edge > 0; const bLeads = edge < 0;
+  return h('div', { class: 'statbar edge' },
     h('div', { class: 'sb-labels' },
       h('span', { class: `sb-val${aLeads ? '' : ' trail'}` }, display ? display[0] : String(va)),
       h('span', { class: 'sb-name' }, label),
       h('span', { class: `sb-val${bLeads ? '' : ' trail'}` }, display ? display[1] : String(vb))),
-    h('div', { class: 'sgb-track', 'aria-hidden': 'true' },
-      h('span', { class: 'sgb-zero' }), bar(va, aLeads, 'a'), bar(vb, bLeads, 'b')));
+    h('div', { class: 'sb-track', 'aria-hidden': 'true' },
+      h('span', { class: `sb-seg${aLeads ? ' lead' : ''}`, style: { flex: String(Math.max(left, 0.5)) } }),
+      h('span', { class: `sb-seg${bLeads ? ' lead' : ''}`, style: { flex: String(Math.max(100 - left, 0.5)) } }),
+      h('span', { class: 'sb-mid' })));
 }
 
 // ---------------------------------------------------------------- StandingsTable

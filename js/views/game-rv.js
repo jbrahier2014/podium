@@ -4,7 +4,7 @@
 
 import { h, clear } from '../util/dom.js';
 import { annotate, summarize, byPlateAppearance, reValue, ZONES } from '../data/rv.js';
-import { crest, badge, chips, statBar, signedBar, emptyState } from '../ui/components.js';
+import { crest, badge, chips, statBar, edgeBar, emptyState } from '../ui/components.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}, ...kids) => {
@@ -130,14 +130,14 @@ export function drawRV(el, d, m, state) {
   const sum = summarize(rows, g);
   const A = sum.batting[g.away.team.id]; const B = sum.batting[g.home.team.id];
   const n2 = (v) => fmtRV(v ?? 0);
-  const bar = (label, a, b, f = n2) => signedBar({ label, a, b, display: [f(a), f(b)] });
+  const bar = (label, a, b, scale, f = n2) => edgeBar({ label, a, b, scale, display: [f(a), f(b)] });
   el.append(h('div', { class: 'group-label' }, 'At the plate'), h('div', { class: 'card stat-compare' },
     h('div', { class: 'sc-teams' }, h('span', {}, crest(g.away.team, 'sm'), g.away.team.abbr), h('span', {}, g.home.team.abbr, crest(g.home.team, 'sm'))),
-    bar('Batting run value', A.rv, B.rv),
-    bar('Per 100 pitches', A.per100, B.per100, (v) => fmtRV(v ?? 0, 1)),
-    bar('On swings', A.swingRV, B.swingRV),
-    bar('On takes', A.takeRV, B.takeRV),
-    bar('Baserunning (steals, pickoffs)', A.running, B.running)));
+    bar('Batting run value', A.rv, B.rv, 3),
+    bar('Per 100 pitches', A.per100, B.per100, 3, (v) => fmtRV(v ?? 0, 1)),
+    bar('On swings', A.swingRV, B.swingRV, 3),
+    bar('On takes', A.takeRV, B.takeRV, 2),
+    bar('Baserunning (steals, pickoffs)', A.running, B.running, 1)));
 
   // Swing / take by attack region, one team at a time
   const side = state.rvSide && sum.batting[state.rvSide] ? state.rvSide : g.away.team.id;
