@@ -334,7 +334,7 @@ a.list-item:active, button.list-item:active { background: var(--surface-hover); 
   overflow: hidden;
 }
 .choice button {
-  height: var(--control-md);
+  height: var(--control-md); padding: 0 var(--space-3); white-space: nowrap;
   font: 600 14px/20px var(--font-sans);
   color: var(--ink-muted);
   background: var(--surface);
@@ -960,12 +960,12 @@ table.stats th:first-child, table.stats td:first-child { padding-left: var(--spa
 .roster-sort .choice { flex: 1; }
 
 /* Home / away toggles */
-.venue-bar { display: flex; padding: 0 var(--gutter); margin: var(--space-3) 0 var(--space-1); }
+.venue-bar { display: flex; margin: var(--space-4) 0 var(--space-1); }
 .group-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .group-label-row .choice { text-transform: none; letter-spacing: 0; }
 .venue-summary { margin: var(--space-2) var(--gutter) var(--space-1); font: 400 13px/18px var(--font-sans); color: var(--ink-muted); }
 .venue-summary strong { color: var(--ink); font-weight: 600; }
 .info-row .k .stat-all { display: block; font: 400 11px/14px var(--font-sans); color: var(--ink-faint, var(--ink-muted)); opacity: .8; }
-.ex-venue { display: flex; padding: 0 var(--gutter); margin-bottom: var(--space-3); }
+.ex-venue { display: flex; margin-bottom: var(--space-3); }
 .ex-venue .choice { flex: 1; }
 .venue-bar .choice { flex: 1; }

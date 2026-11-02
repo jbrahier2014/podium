@@ -222,8 +222,9 @@ const TAB_RENDERERS = {
       const drawScoring = () => {
         clear(card);
         const games = done.filter((g) => view.venue === 'all' || venueOf(g, id) === view.venue);
-        card.append(h('div', { class: 'group-label group-label-row' }, h('span', {}, 'Scoring'),
-          choice(VENUES.map((v) => (v.id === 'all' ? { ...v, label: 'All' } : v)), VENUES.some((v) => v.id === view.venue) ? view.venue : 'all', (v) => { view.venue = v; drawScoring(); }, { label: 'Home or away' })));
+        // Same full-width toggle as the Schedule tab, above the Scoring heading
+        card.append(h('div', { class: 'venue-bar' }, choice(VENUES, VENUES.some((v) => v.id === view.venue) ? view.venue : 'all', (v) => { view.venue = v; drawScoring(); }, { label: 'Home or away' })),
+          h('div', { class: 'group-label' }, 'Scoring'));
         if (!games.length) { card.append(h('div', { class: 'card card-pad muted' }, `No completed games ${VENUE_LABEL[view.venue] || ''} yet.`)); return; }
         const s = scoring(games, id);
         card.append(statCard([
