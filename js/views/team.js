@@ -6,10 +6,10 @@ import { pctLabel100 } from '../util/prob.js';
 import { h, icon, ICONS, toast, clear } from '../util/dom.js';
 import { settings } from '../store/settings.js';
 import { getTeams, getTeamSchedule, getRoster, getStandings, getTeamStats, getRatings, getRatingSeasons } from '../data/index.js';
-import { STATS, fmt, percentiles, ordinal, SCOPE } from '../data/statdefs.js';
+import { STATS, fmt, percentiles, ordinal, SCOPE, VENUES, VENUE_LABEL, hasSplits, splitData } from '../data/statdefs.js';
 import { LEAGUES, seasonYear } from '../leagues.js';
 import { etDay, etTime, etISODate } from '../util/time.js';
-import { crest, tabs, badge, chips, emptyState, standingsTable, percentileRow } from '../ui/components.js';
+import { crest, tabs, badge, chips, choice, emptyState, standingsTable, percentileRow } from '../ui/components.js';
 import { resultLine } from '../ui/format.js';
 import { navigate } from '../router.js';
 
@@ -97,39 +97,93 @@ export default {
   },
 };
 
+// ---------------------------------------------------------------- roster
+const SUFFIX = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i;
+/** Last name for sorting: "Jerome Bettis Jr." -> "bettis" */
+function lastName(name) {
+  const parts = String(name || '').trim().split(/\s+/);
+  while (parts.length > 1 && SUFFIX.test(parts[parts.length - 1])) parts.pop();
+  return (parts[parts.length - 1] || '').toLowerCase();
+}
+
+/**
+ * Roster with a search box (name or number), position chips and a sort choice.
+ * Units (Offense / Defense / Special teams, or Pitchers / Catchers...) stay as groups.
+ */
+function rosterView(groups) {
+  const positions = [...new Set(groups.flatMap((g) => g.players.map((p) => p.pos).filter(Boolean)))];
+  const st = { q: '', pos: 'all', sort: 'name' };
+  const list = h('div');
+  const input = h('input', { type: 'search', class: 'roster-search', placeholder: 'Search name or number', 'aria-label': 'Search the roster by name or number', autocomplete: 'off', inputmode: 'search' });
+  input.addEventListener('input', () => { st.q = input.value.trim().toLowerCase(); draw(); });
+  const posBar = h('div');
+  const sortBar = h('div');
+  const drawControls = () => {
+    clear(posBar); clear(sortBar);
+    posBar.append(chips([{ id: 'all', label: 'All' }, ...positions.map((p) => ({ id: p, label: p }))], st.pos, (v) => { st.pos = v; drawControls(); draw(); }, { label: 'Position' }));
+    sortBar.append(h('div', { class: 'roster-sort' }, h('span', { class: 't-caption' }, 'Sort'),
+      choice([{ id: 'name', label: 'Last name' }, { id: 'number', label: 'Number' }, { id: 'pos', label: 'Position' }], st.sort, (v) => { st.sort = v; drawControls(); draw(); }, { label: 'Sort by' })));
+  };
+  const posRank = (p) => { const i = positions.indexOf(p); return i < 0 ? 99 : i; };
+  const num = (p) => (p.jersey === '' || p.jersey == null ? 1e3 : Number(p.jersey));
+  const cmp = {
+    name: (a, b) => lastName(a.name).localeCompare(lastName(b.name)) || a.name.localeCompare(b.name),
+    number: (a, b) => num(a) - num(b) || lastName(a.name).localeCompare(lastName(b.name)),
+    pos: (a, b) => posRank(a.pos) - posRank(b.pos) || lastName(a.name).localeCompare(lastName(b.name)),
+  };
+  const matches = (p) => {
+    if (st.pos !== 'all' && p.pos !== st.pos) return false;
+    if (!st.q) return true;
+    if (/^\d+$/.test(st.q)) return String(p.jersey) === st.q;
+    return p.name.toLowerCase().includes(st.q);
+  };
+  const draw = () => {
+    clear(list);
+    let shown = 0;
+    for (const g of groups) {
+      const players = g.players.filter(matches).sort(cmp[st.sort]);
+      if (!players.length) continue;
+      shown += players.length;
+      list.append(
+        h('div', { class: 'group-label' }, `${g.name} \u00b7 ${players.length}`),
+        h('div', { class: 'list' }, players.map((p) => h('div', { class: 'list-item roster-row' },
+          h('span', { class: 'jersey' }, p.jersey),
+          h('span', { class: 'grow' }, h('div', { class: 'title' }, p.name), p.detail ? h('div', { class: 'sub' }, p.detail) : null),
+          p.pos ? badge(p.pos) : null))));
+    }
+    if (!shown) list.append(h('div', { class: 'card' }, emptyState({ iconName: 'search', title: 'No players match', text: 'Try another name, number or position.' })));
+  };
+  drawControls(); draw();
+  return [h('div', { class: 'roster-controls' }, input), posBar, sortBar, list];
+}
+
 // ---------------------------------------------------------------- tabs
 const TAB_RENDERERS = {
   async schedule({ league, id, schedule }) {
     const { games } = await schedule();
     if (!games.length) return h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No games scheduled', text: '' }));
-    const sorted = [...games].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-    const next = sorted.find((g) => g.status.state !== 'post');
-    // Group: by month for baseball, by season part for football
-    const groupOf = (g) => (league === 'mlb'
-      ? new Intl.DateTimeFormat('en-GB', { month: 'long', timeZone: 'America/New_York' }).format(new Date(g.start))
-      : g.seasonType === 3 ? 'Postseason' : g.seasonType === 1 ? 'Preseason' : 'Regular season');
-    const groups = [];
-    for (const g of sorted) {
-      const name = groupOf(g);
-      if (!groups.length || groups[groups.length - 1].name !== name) groups.push({ name, games: [] });
-      groups[groups.length - 1].games.push(g);
-    }
-    return groups.flatMap((grp) => [
-      h('div', { class: 'group-label' }, grp.name),
-      h('div', { class: 'list' }, grp.games.map((g) => scheduleRow(g, id, g === next))),
-    ]);
+    const all = [...games].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    const next = all.find((g) => g.status.state !== 'post');
+    const opts = [...VENUES];
+    if (all.some((g) => g.neutral)) opts.push({ id: 'neutral', label: 'Neutral' });
+    if (!opts.some((o) => o.id === view.venue)) view.venue = 'all';
+    const bar = h('div'); const summary = h('div'); const list = h('div');
+    const draw = () => {
+      clear(bar); clear(summary); clear(list);
+      bar.append(h('div', { class: 'venue-bar' }, choice(opts, view.venue, (v) => { view.venue = v; draw(); }, { label: 'Home or away' })));
+      const shown = all.filter((g) => view.venue === 'all' || venueOf(g, id) === view.venue);
+      if (view.venue !== 'all') summary.append(venueSummary(league, id, shown, view.venue));
+      if (!shown.length) { list.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: `No ${opts.find((o) => o.id === view.venue).label.toLowerCase()} games`, text: '' }))); return; }
+      list.append(...scheduleGroups(league, id, shown, next));
+    };
+    draw();
+    return [bar, summary, list];
   },
 
   async roster({ league, id, load }) {
     const { groups } = await load('roster', () => getRoster(league, id));
     if (!groups.length) return h('div', { class: 'card' }, emptyState({ iconName: 'book', title: 'No roster available', text: '' }));
-    return groups.flatMap((g) => [
-      h('div', { class: 'group-label' }, `${g.name} · ${g.players.length}`),
-      h('div', { class: 'list' }, g.players.map((p) => h('div', { class: 'list-item roster-row' },
-        h('span', { class: 'jersey' }, p.jersey),
-        h('span', { class: 'grow' }, h('div', { class: 'title' }, p.name), p.detail ? h('div', { class: 'sub' }, p.detail) : null),
-        p.pos ? badge(p.pos) : null))),
-    ]);
+    return rosterView(groups);
   },
 
   async standings({ league, id, load }) {
@@ -160,18 +214,28 @@ const TAB_RENDERERS = {
   async stats({ league, id, schedule, load }) {
     const [st, sched] = await Promise.all([load('stats', () => getTeamStats(league, id)), schedule().catch(() => null)]);
     const out = [];
-    // Scoring from completed games (all leagues)
+    // Scoring from completed games (all leagues), with a Home / Away toggle
     const done = (sched?.games || []).filter((g) => g.status.state === 'post' && g.status.completed);
     if (done.length) {
-      let pf = 0; let pa = 0;
-      for (const g of done) { const me = g.home.team.id === String(id) ? g.home : g.away; const opp = me === g.home ? g.away : g.home; pf += me.score || 0; pa += opp.score || 0; }
       const unit = league === 'mlb' ? 'Runs' : 'Points';
-      out.push(h('div', { class: 'group-label' }, 'Scoring'), statCard([
-        { label: `${unit} per game`, value: (pf / done.length).toFixed(1) },
-        { label: `${unit} allowed per game`, value: (pa / done.length).toFixed(1) },
-        { label: `${unit === 'Runs' ? 'Run' : 'Point'} differential`, value: `${pf - pa > 0 ? '+' : ''}${pf - pa}` },
-        { label: 'Games played', value: String(done.length) },
-      ]));
+      const card = h('div');
+      const drawScoring = () => {
+        clear(card);
+        const games = done.filter((g) => view.venue === 'all' || venueOf(g, id) === view.venue);
+        card.append(h('div', { class: 'group-label group-label-row' }, h('span', {}, 'Scoring'),
+          choice(VENUES.map((v) => (v.id === 'all' ? { ...v, label: 'All' } : v)), VENUES.some((v) => v.id === view.venue) ? view.venue : 'all', (v) => { view.venue = v; drawScoring(); }, { label: 'Home or away' })));
+        if (!games.length) { card.append(h('div', { class: 'card card-pad muted' }, `No completed games ${VENUE_LABEL[view.venue] || ''} yet.`)); return; }
+        const s = scoring(games, id);
+        card.append(statCard([
+          { label: 'Record', value: s.record },
+          { label: `${unit} per game`, value: s.pf.toFixed(1) },
+          { label: `${unit} allowed per game`, value: s.pa.toFixed(1) },
+          { label: `${unit === 'Runs' ? 'Run' : 'Point'} differential`, value: `${s.diff > 0 ? '+' : ''}${s.diff}` },
+          { label: 'Games played', value: String(s.n) },
+        ]));
+      };
+      drawScoring();
+      out.push(card);
     }
     for (const g of st.groups) out.push(h('div', { class: 'group-label' }, g.name), statCard(g.rows));
     out.push(h('p', { class: 'footnote' }, st.ranked ? `${seasonYear(league)} regular season. Rank is among all 30 teams (1st is best).` : `${seasonYear(league)} regular season. League ranks and advanced stats arrive with the nightly stats.`));
@@ -191,7 +255,12 @@ const TAB_RENDERERS = {
         return;
       }
       clear(out);
-      out.append(...advancedContent(league, id, team, data));
+      const split = hasSplits(data);
+      const venue = split && VENUES.some((v) => v.id === view.venue) ? view.venue : 'all';
+      if (split) {
+        out.append(h('div', { class: 'venue-bar' }, choice(VENUES, venue, (v) => { view.venue = v; draw(season); }, { label: 'Home or away' })));
+      }
+      out.append(...advancedContent(league, id, team, splitData(data, venue), venue));
     };
     const wrap = [];
     if (seasons.length > 1) wrap.push(chips(seasons.map((x) => ({ id: x, label: String(x) })), seasons[0], (x) => { wrap[0].querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c.textContent === String(x)))); draw(x); }, { label: 'Season' }));
@@ -202,6 +271,51 @@ const TAB_RENDERERS = {
 };
 
 // ---------------------------------------------------------------- pieces
+// Remembered while the app is open: the Home/Away choice carries across teams and tabs
+const view = { venue: 'all' };
+/** 'home' | 'away' | 'neutral' for this team in game g */
+const venueOf = (g, teamId) => (g.neutral ? 'neutral' : g.home.team.id === String(teamId) ? 'home' : 'away');
+
+function scheduleGroups(league, id, games, next) {
+    // Group: by month for baseball, by season part for football
+    const groupOf = (g) => (league === 'mlb'
+      ? new Intl.DateTimeFormat('en-GB', { month: 'long', timeZone: 'America/New_York' }).format(new Date(g.start))
+      : g.seasonType === 3 ? 'Postseason' : g.seasonType === 1 ? 'Preseason' : 'Regular season');
+    const groups = [];
+    for (const g of games) {
+      const name = groupOf(g);
+      if (!groups.length || groups[groups.length - 1].name !== name) groups.push({ name, games: [] });
+      groups[groups.length - 1].games.push(g);
+    }
+    return groups.flatMap((grp) => [
+      h('div', { class: 'group-label' }, grp.name),
+      h('div', { class: 'list' }, grp.games.map((g) => scheduleRow(g, id, g === next))),
+    ]);
+}
+
+/** Record and scoring for the filtered games: "4-1 at home · 31.2 points per game · 17.0 allowed" */
+function venueSummary(league, id, games, venue) {
+  const done = games.filter((g) => g.status.state === 'post' && g.status.completed);
+  const where = venue === 'neutral' ? 'at neutral sites' : VENUE_LABEL[venue];
+  if (!done.length) return h('p', { class: 'venue-summary' }, `No completed games ${where} yet.`);
+  const s = scoring(done, id);
+  const unit = league === 'mlb' ? 'runs' : 'points';
+  return h('p', { class: 'venue-summary' }, h('strong', {}, `${s.record} ${where}`),
+    ` \u00b7 ${s.pf.toFixed(1)} ${unit} per game \u00b7 ${s.pa.toFixed(1)} allowed \u00b7 ${s.diff > 0 ? '+' : ''}${s.diff} differential`);
+}
+
+/** Record and per-game scoring from completed games */
+function scoring(done, id) {
+  let pf = 0; let pa = 0; let w = 0; let l = 0; let t = 0;
+  for (const g of done) {
+    const me = g.home.team.id === String(id) ? g.home : g.away; const opp = me === g.home ? g.away : g.home;
+    pf += me.score || 0; pa += opp.score || 0;
+    if ((me.score || 0) > (opp.score || 0)) w += 1; else if ((me.score || 0) < (opp.score || 0)) l += 1; else t += 1;
+  }
+  const n = done.length;
+  return { n, w, l, t, record: `${w}-${l}${t ? `-${t}` : ''}`, pf: pf / n, pa: pa / n, diff: pf - pa };
+}
+
 function scheduleRow(g, teamId, isNext) {
   const me = g.home.team.id === String(teamId) ? g.home : g.away;
   const opp = me === g.home ? g.away : g.home;
@@ -241,9 +355,10 @@ const SUMMARY = {
 };
 const HIST_NAMES = { pred: 'Predictor', srs: 'SRS', elo: 'Elo', pyth_pct: 'Pythagorean win %', win_pct: 'Win %' };
 
-function advancedContent(league, id, team, data) {
+function advancedContent(league, id, team, data, venue = 'all') {
   const me = data.teams.find((t) => t.id === String(id));
   if (!me) return [h('div', { class: 'card' }, emptyState({ iconName: 'scatter', title: 'No advanced stats for this team', text: `Not in the ${data.season} ${LEAGUES[league].name} data.` }))];
+  if (venue !== 'all') return splitContent(league, me, data, venue);
   const defs = STATS[league];
   const out = [];
   const showOdds = (v) => (v == null ? null : pctLabel100(v, 1));
@@ -293,6 +408,25 @@ function advancedContent(league, id, team, data) {
       h('div', { class: 'info-row' }, h('span', { class: 'k' }, m), h('span', { class: 'v num' }, h('strong', { class: 'stat-val' }, rec))))));
   }
   out.push(h('p', { class: 'footnote' }, `Ranks are among all ${data.teams.length} teams. Definitions and formulas are in the `, h('a', { href: '#/glossary' }, 'Glossary'), '.'));
+  return out;
+}
+
+/** Advanced tab for home or road games only: every stat with a split, ranked among all teams' same split. */
+function splitContent(league, me, data, venue) {
+  const where = VENUE_LABEL[venue];
+  if (!Object.keys(me.v).length) return [h('div', { class: 'card' }, emptyState({ iconName: 'scatter', title: `No games ${where} yet`, text: '' }))];
+  const defs = STATS[league].filter((d) => me.v[d.key] != null && d.fmt !== 'rec');
+  const out = [h('div', { class: 'group-label' }, `${me.record || ''} ${where} \u00b7 ${data.final ? `final ${data.season}` : `through ${data.asOf}`}`)];
+  for (const gname of [...new Set(defs.map((d) => d.group))]) {
+    const items = defs.filter((d) => d.group === gname);
+    out.push(h('div', { class: 'group-label' }, gname), h('div', { class: 'card' }, items.map((d) => {
+      const p = d.hib == null ? null : percentiles(data.teams, d).get(me.id);
+      const all = me.vAll?.[d.key];
+      return h('div', { class: 'info-row' }, h('span', { class: 'k' }, d.label, all != null ? h('span', { class: 'stat-all' }, `All games ${fmt(all, d.fmt)}`) : null),
+        h('span', { class: 'v num' }, h('strong', { class: 'stat-val' }, fmt(me.v[d.key], d.fmt)), p ? h('span', { class: 'stat-rank' }, ordinal(p.rank)) : null));
+    })));
+  }
+  out.push(h('p', { class: 'footnote' }, `Games ${where} only${league === 'mlb' ? '' : ' (neutral-site games are left out)'}. Ranks compare every team\u2019s games ${where} (1st is best). Ratings like ${league === 'cfb' ? 'Predictor and SRS' : league === 'nfl' ? 'SRS and Elo' : 'Pythagorean wins'} use all games, so they\u2019re under All games.`));
   return out;
 }
 

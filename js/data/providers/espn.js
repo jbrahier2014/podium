@@ -59,6 +59,12 @@ export async function teamIndex(league) {
   return indexCache[league];
 }
 
+/** "Jerome Bettis Jr." -> "J. Bettis Jr." (box scores; ESPN omits short names for college) */
+function shortPlayer(name) {
+  const parts = String(name || '').trim().split(/\s+/);
+  return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : (name || '');
+}
+
 // ---------------------------------------------------------------- status
 function periodLabel(p) {
   if (p <= 4) return `Q${p}`;
@@ -358,6 +364,16 @@ export async function getGame(league, gameId, { force = false } = {}) {
   })));
   if (pbp.every((p) => p.seq)) pbp.sort((a, b) => a.seq - b.seq);
 
+  // ESPN's game header can lag the play-by-play (e.g. still "Halftime" after the
+  // third quarter has started). If the latest play is further along, trust it.
+  if (game.status.state === 'in' && pbp.length) {
+    const lp = [...pbp].reverse().find((p) => p.period && p.clock);
+    const sp = Number(game.status.period) || 0;
+    if (lp && (lp.period > sp || (game.status.detail === 'Half' && lp.period >= 3))) {
+      game.status = { ...game.status, period: lp.period, clock: lp.clock, detail: `${periodLabel(lp.period)} ${lp.clock}` };
+    }
+  }
+
   // Win probability (home team, 0-100) against game minutes
   const wpRaw = j.winprobability || [];
   const winProb = wpRaw.map((w, i) => {
@@ -376,6 +392,10 @@ export async function getGame(league, gameId, { force = false } = {}) {
     const next = winProb.slice(i + 1).find((q) => q.x != null);
     pt.x = prev && next ? (prev.x + next.x) / 2 : prev ? prev.x : next ? next.x : 0;
   });
+  // Game time only moves forward: a play ESPN files out of order mustn't pull the
+  // line back toward the start (that drew a stray stroke across the chart).
+  let maxX = 0;
+  winProb.forEach((pt) => { maxX = Math.max(maxX, pt.x); pt.x = maxX; });
 
   // Team stats comparison
   const boxTeams = j.boxscore?.teams || [];
@@ -398,7 +418,7 @@ export async function getGame(league, gameId, { force = false } = {}) {
     return WANT.map((cat) => t.statistics?.find((s) => s.name === cat)).filter((s) => s && s.athletes?.length).map((s) => ({
       title: TITLES[s.name] || s.name,
       labels: s.labels || [],
-      rows: s.athletes.slice(0, s.name === 'defensive' ? 8 : 6).map((a) => ({ name: a.athlete?.shortName || a.athlete?.displayName, values: a.stats || [] })),
+      rows: s.athletes.slice(0, s.name === 'defensive' ? 8 : 6).map((a) => ({ name: a.athlete?.shortName || shortPlayer(a.athlete?.displayName), values: a.stats || [] })),
       totals: s.totals || null,
     }));
   };

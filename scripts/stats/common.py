@@ -247,3 +247,33 @@ def ranks(values: dict, higher_is_better=True) -> dict:
         out[k] = rank
         prev = v
     return out
+
+
+def venue_splits(rows, pts_keys=("ppg", "papg", "pd")):
+    """Home/away results. rows: (team, venue, pf, pa) with venue 'home', 'away' or None
+    (neutral site, left out). Returns {team: {'home': {...}, 'away': {...}}} with
+    record, win_pct, gp and per-game scoring under pts_keys (for, against, total diff)."""
+    acc = {}
+    for team, venue, pf, pa in rows:
+        if venue not in ("home", "away") or pf is None or pa is None:
+            continue
+        a = acc.setdefault(team, {}).setdefault(venue, [0, 0, 0, 0, 0])  # w, l, t, pf, pa
+        a[0 if pf > pa else 1 if pf < pa else 2] += 1
+        a[3] += pf; a[4] += pa
+    out = {}
+    for team, sides in acc.items():
+        for venue, (w, l, t, pf, pa) in sides.items():
+            gp = w + l + t
+            out.setdefault(team, {})[venue] = {
+                "gp": gp, "record": f"{w}-{l}" + (f"-{t}" if t else ""), "win_pct": r((w + 0.5 * t) / gp, 3) if gp else None,
+                pts_keys[0]: r(pf / gp, 2) if gp else None, pts_keys[1]: r(pa / gp, 2) if gp else None, pts_keys[2]: int(pf - pa),
+            }
+    return out
+
+
+def merge_splits(base, extra):
+    """Merge {team: {venue: {k: v}}} dicts in place; drops None values."""
+    for team, sides in (extra or {}).items():
+        for venue, vals in sides.items():
+            base.setdefault(team, {}).setdefault(venue, {}).update({k: v for k, v in vals.items() if v is not None})
+    return base

@@ -245,6 +245,8 @@ function winProbCard(d) {
 }
 
 // ---------------------------------------------------------------- box score
+// Box-score shorthand for long headings in wide sections
+const SHORT_HEAD = { SACKS: 'SK', LONG: 'LNG', 'C/ATT': 'C/A', SOLO: 'SOL', TACKLES: 'TKL' };
 function drawBox(el, d, state, redraw) {
   const g = d.game;
   if (!d.box) { el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No box score yet', text: 'It fills in once the game starts.' }))); return; }
@@ -255,10 +257,10 @@ function drawBox(el, d, state, redraw) {
   const sections = state.boxSide === g.home.team.id ? d.box.home : d.box.away;
   if (!sections.length) { el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No player stats yet', text: '' }))); return; }
   for (const s of sections) {
-    el.append(h('div', { class: 'card box-section' },
+    el.append(h('div', { class: `card box-section${s.labels.length >= 7 ? ' wide' : ''}` },
       h('div', { class: 'bs-title' }, s.title),
       h('div', { class: 'table-wrap' }, h('table', { class: 'stats' },
-        h('thead', {}, h('tr', {}, h('th', {}, ''), s.labels.map((l) => h('th', {}, l)))),
+        h('thead', {}, h('tr', {}, h('th', {}, ''), s.labels.map((l) => h('th', { title: l }, s.labels.length >= 7 ? (SHORT_HEAD[String(l).toUpperCase()] || l) : l)))),
         h('tbody', {},
           s.rows.map((r) => h('tr', {}, h('td', { class: r.sub ? 'sub' : null }, r.name.trim()), r.values.map((v) => h('td', {}, v)))),
           s.totals ? h('tr', { class: 'totals' }, h('td', {}, 'Team'), s.totals.map((v) => h('td', {}, v))) : null)))));

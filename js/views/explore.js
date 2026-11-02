@@ -11,8 +11,8 @@ import { h, clear } from '../util/dom.js';
 import { LEAGUES } from '../leagues.js';
 import { settings } from '../store/settings.js';
 import { getRatings, getRatingSeasons, getTeams } from '../data/index.js';
-import { STATS, fmt, percentiles, ordinal, SCOPE } from '../data/statdefs.js';
-import { crest, tabs, chips, statBar, percentileRow, sparkline, emptyState } from '../ui/components.js';
+import { STATS, fmt, percentiles, ordinal, SCOPE, VENUES, VENUE_LABEL, hasSplits, splitData, keysWithData } from '../data/statdefs.js';
+import { crest, tabs, chips, choice, statBar, percentileRow, sparkline, emptyState } from '../ui/components.js';
 import { pageTitle, leagueTabs, defaultLeague } from './common.js';
 import { navigate } from '../router.js';
 import { monthDay } from '../util/time.js';
@@ -119,6 +119,24 @@ function teamSelect(teams, value, onChange, label = 'Team') {
   return sel;
 }
 
+/**
+ * Home / away for Leaders and Scatter: the bar, plus the data to use (each team's
+ * split values) and which stats have splits. Returns { bar, data, avail, venue }.
+ */
+function venueView(env) {
+  const { data, q, setQuery } = env;
+  if (!hasSplits(data)) return { bar: null, data, avail: null, venue: 'all' };
+  const venue = ['home', 'away'].includes(q.venue) ? q.venue : 'all';
+  const vdata = splitData(data, venue);
+  const bar = h('div', { class: 'ex-venue' }, choice(VENUES, venue, (v) => { setQuery({ venue: v === 'all' ? '' : v }); env.redraw(); }, { label: 'Home or away' }));
+  return { bar, data: vdata, avail: venue === 'all' ? null : keysWithData(vdata), venue };
+}
+/** The stat for key, or (when it has no split) the first stat that does */
+const defIn = (league, key, avail) => {
+  const d = defOf(league, key);
+  return !avail || avail.has(d.key) ? d : STATS[league].find((x) => avail.has(x.key)) || d;
+};
+
 const field = (label, control) => h('label', { class: 'ex-field' }, h('span', { class: 't-overline muted' }, label), control);
 const defOf = (league, key) => STATS[league].find((d) => d.key === key) || STATS[league][0];
 const firstFeatured = (env) => settings.get().featured.filter((f) => f.league === env.league).map((f) => String(f.id)).find((id) => env.data.teams.some((t) => t.id === id)) || env.data.teams[0].id;
@@ -128,8 +146,9 @@ const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValu
 const TOOL_RENDER = {
   // ---- Leaders
   leaders(env) {
-    const { league, data, q, setQuery, ident, featured } = env;
-    const def = defOf(league, q.stat);
+    const { league, q, setQuery, ident, featured } = env;
+    const vv = venueView(env); const { data, avail } = vv;
+    const def = defIn(league, q.stat, avail);
     const pcts = percentiles(data.teams, def);
     const rows = data.teams.filter((t) => t.v[def.key] != null).sort((a, b) => {
       const s = def.hib === false ? 1 : -1;
@@ -146,10 +165,11 @@ const TOOL_RENDER = {
         h('span', { class: 'lr-val' }, fmt(t.v[def.key], def.fmt)));
     }));
     return [
-      h('div', { class: 'ex-controls' }, field('Stat', statSelect(league, def.key, (k) => { setQuery({ stat: k }); env.redraw(); }))),
+      vv.bar,
+      h('div', { class: 'ex-controls' }, field('Stat', statSelect(league, def.key, (k) => { setQuery({ stat: k }); env.redraw(); }, { filter: (d) => !avail || avail.has(d.key) }))),
       def.hib == null ? h('p', { class: 'footnote', style: { marginTop: 0, marginBottom: 'var(--space-3)' } }, 'A style stat: neither high nor low is better. Sorted high to low.') : null,
       list,
-      h('p', { class: 'footnote' }, `${rows.length} teams · ${data.final ? `final ${data.season}` : `through ${data.asOf}`}. Bars show league percentile (full = best). Tap a team for its fingerprint.`),
+      h('p', { class: 'footnote' }, `${rows.length} teams · ${vv.venue !== 'all' ? `games ${VENUE_LABEL[vv.venue]} only · ` : ''}${data.final ? `final ${data.season}` : `through ${data.asOf}`}. Bars show league percentile (full = best). Tap a team for its fingerprint.`),
     ].filter(Boolean);
   },
 
@@ -159,15 +179,25 @@ const TOOL_RENDER = {
     const teams = data.teams.map((t) => ({ ...t, ...ident(t), v: t.v }));
     const aId = teams.some((t) => t.id === q.a) ? q.a : firstFeatured(env);
     const bId = teams.some((t) => t.id === q.b) && q.b !== aId ? q.b : teams.find((t) => t.id !== aId && !env.featured.has(t.id))?.id;
-    const A = teams.find((t) => t.id === aId); const B = teams.find((t) => t.id === bId);
+    let A = teams.find((t) => t.id === aId); let B = teams.find((t) => t.id === bId);
+    // Venue: all games, or A at home vs B on the road (or the reverse) — a game preview
+    const split = hasSplits(data);
+    const vs = split && ['ah', 'aa'].includes(q.vs) ? q.vs : 'all';
+    const vA = vs === 'ah' ? 'home' : vs === 'aa' ? 'away' : 'all'; const vB = vs === 'ah' ? 'away' : vs === 'aa' ? 'home' : 'all';
+    const dataA = splitData(data, vA); const dataB = splitData(data, vB);
+    if (vs !== 'all') {
+      const pick = (d, t) => { const x = d.teams.find((y) => y.id === t.id); return { ...t, v: x.v, record: x.record ? `${x.record} ${VENUE_LABEL[d.venue]}` : null }; };
+      A = pick(dataA, A); B = pick(dataB, B);
+    }
+    const venueBar = split ? h('div', { class: 'ex-venue' }, choice([{ id: 'all', label: 'All games' }, { id: 'ah', label: `${A.abbr} home` }, { id: 'aa', label: `${A.abbr} away` }], vs,
+      (v) => { setQuery({ vs: v === 'all' ? '' : v }); env.redraw(); }, { label: 'Venue' })) : null;
     const defs = [...STATS[league].filter((d) => d.fp), ...STATS[league].filter((d) => !d.fp)].filter((d) => d.hib != null && A.v[d.key] != null && B.v[d.key] != null);
     const groups = [{ name: 'Key stats', defs: defs.filter((d) => d.fp) }, ...[...new Set(defs.filter((d) => !d.fp).map((d) => d.group))].map((g) => ({ name: g, defs: defs.filter((d) => !d.fp && d.group === g) }))];
     let aWins = 0; let bWins = 0;
     const blocks = groups.filter((g) => g.defs.length).map((g) => [
       h('div', { class: 'group-label' }, g.name),
       h('div', { class: 'card stat-compare' }, g.defs.map((d) => {
-        const p = percentiles(data.teams, d);
-        const pa = p.get(A.id)?.pct ?? 0; const pb = p.get(B.id)?.pct ?? 0;
+        const pa = percentiles(dataA.teams, d).get(A.id)?.pct ?? 0; const pb = percentiles(dataB.teams, d).get(B.id)?.pct ?? 0;
         if (g.name === 'Key stats') { if (pa > pb) aWins++; else if (pb > pa) bWins++; }
         return statBar({ label: d.label, home: pa, away: pb, display: [fmt(A.v[d.key], d.fmt), fmt(B.v[d.key], d.fmt)] });
       })),
@@ -180,15 +210,19 @@ const TOOL_RENDER = {
         h('div', { class: 'h2h-side' }, crest(A, 'lg'), h('div', { class: 'h2h-name' }, A.short), h('div', { class: 't-caption' }, A.record || '')),
         h('div', { class: 'h2h-score' }, h('span', {}, aWins), h('span', { class: 'muted' }, '–'), h('span', {}, bWins)),
         h('div', { class: 'h2h-side' }, crest(B, 'lg'), h('div', { class: 'h2h-name' }, B.short), h('div', { class: 't-caption' }, B.record || ''))),
-      h('p', { class: 'footnote', style: { marginTop: 0, marginBottom: 'var(--space-2)', textAlign: 'center' } }, 'Key stats won. Bars compare league percentiles; the better side is highlighted.'),
+      venueBar,
+      h('p', { class: 'footnote', style: { marginTop: 0, marginBottom: 'var(--space-2)', textAlign: 'center' } }, vs === 'all' ? 'Key stats won. Bars compare league percentiles; the better side is highlighted.'
+        : `${A.short} ${VENUE_LABEL[vA]} vs ${B.short} ${VENUE_LABEL[vB]}. Each side is ranked against every team\u2019s games in the same spot.`),
       ...blocks,
-    ];
+    ].filter(Boolean);
   },
 
   // ---- Scatter
   scatter(env) {
-    const { league, data, q, setQuery, ident, featured, charts } = env;
-    const dx = defOf(league, q.x); const dy = defOf(league, q.y);
+    const { league, q, setQuery, ident, featured, charts } = env;
+    const vv = venueView(env); const { data, avail } = vv;
+    const dx = defIn(league, q.x, avail); const dy = defIn(league, q.y, avail);
+    const pickable = { filter: (d) => !avail || avail.has(d.key) };
     const pts = data.teams.filter((t) => t.v[dx.key] != null && t.v[dy.key] != null).map((t) => ({ x: t.v[dx.key], y: t.v[dy.key], t, id: ident(t) }));
     const canvas = h('canvas', { role: 'img', 'aria-label': `Scatter plot of ${dy.label} against ${dx.label} for ${pts.length} teams` });
     const median = (arr) => { const s = [...arr].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
@@ -285,9 +319,10 @@ const TOOL_RENDER = {
 
     const swap = h('button', { class: 'btn ghost ex-swap', 'aria-label': 'Swap axes', onclick: () => { setQuery({ x: dy.key, y: dx.key }); env.redraw(); } }, '⇅ Swap');
     return [
+      vv.bar,
       h('div', { class: 'ex-controls two' },
-        field('X axis', statSelect(league, dx.key, (k) => { setQuery({ x: k }); env.redraw(); }, { label: 'X axis' })),
-        field('Y axis', statSelect(league, dy.key, (k) => { setQuery({ y: k }); env.redraw(); }, { label: 'Y axis' }))),
+        field('X axis', statSelect(league, dx.key, (k) => { setQuery({ x: k }); env.redraw(); }, { label: 'X axis', ...pickable })),
+        field('Y axis', statSelect(league, dy.key, (k) => { setQuery({ y: k }); env.redraw(); }, { label: 'Y axis', ...pickable }))),
       h('div', { class: 'card card-pad' },
         h('div', { class: 'scatter-wrap' }, canvas),
         panel,
@@ -296,8 +331,8 @@ const TOOL_RENDER = {
           h('span', {}, h('i', { class: 'sw sw-rest' }), 'Others'),
           h('span', {}, h('i', { class: 'sw sw-med' }), 'League median'),
           swap)),
-      h('p', { class: 'footnote' }, `${pts.length} teams. Tap a dot to see who it is; tap Open for the team page.${flipped.length ? ` ${flipped.map((a) => a.toUpperCase()).join(' and ')} axis flipped so up and right are better.` : ''}`),
-    ];
+      h('p', { class: 'footnote' }, `${pts.length} teams${vv.venue !== 'all' ? `, games ${VENUE_LABEL[vv.venue]} only` : ''}. Tap a dot to see who it is; tap Open for the team page.${flipped.length ? ` ${flipped.map((a) => a.toUpperCase()).join(' and ')} axis flipped so up and right are better.` : ''}`),
+    ].filter(Boolean);
   },
 
   // ---- Trends

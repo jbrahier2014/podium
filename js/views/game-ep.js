@@ -15,8 +15,10 @@ const svg = (tag, attrs = {}, ...kids) => {
   return el;
 };
 const MINUS = '−';
-export const fmtEP = (v) => (v == null ? '–' : `${v < 0 ? MINUS : ''}${Math.abs(v).toFixed(1)}`);
-export const fmtEPA = (v) => (v == null ? '' : `${v >= 0 ? '+' : MINUS}${Math.abs(v).toFixed(1)}`);
+// Round first, then pick the sign, so -0.03 shows as 0.0 (never "-0.0" or "+0.0")
+const rnd = (v, d) => { const x = Number(Math.abs(v).toFixed(d)); return x === 0 ? 0 : Math.sign(v) * x; };
+export const fmtEP = (v) => { if (v == null) return '–'; const x = rnd(v, 1); return `${x < 0 ? MINUS : ''}${Math.abs(x).toFixed(1)}`; };
+export const fmtEPA = (v) => { if (v == null) return ''; const x = rnd(v, 1); return `${x > 0 ? '+' : x < 0 ? MINUS : ''}${Math.abs(x).toFixed(1)}`; };
 const ordinal = (d) => ['1st', '2nd', '3rd', '4th'][d - 1] || '';
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
@@ -221,9 +223,10 @@ export function drawEPA(el, d, model) {
   if (!rows.some((r) => r.epa != null)) { el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No plays yet', text: 'EPA fills in once the game starts.' }))); return null; }
   const sum = summarize(rows, g);
   const A = sum.teams[g.away.team.id]; const B = sum.teams[g.home.team.id];
-  const n2 = (v) => (v == null ? '–' : `${v >= 0 ? '' : MINUS}${Math.abs(v).toFixed(2)}`);
+  const n2 = (v) => { if (v == null) return '–'; const x = rnd(v, 2); return `${x < 0 ? MINUS : ''}${Math.abs(x).toFixed(2)}`; };
   const p0 = (v) => (v == null ? '–' : `${Math.round(v * 100)}%`);
-  // statBar shows shares: put both on a common non-negative scale
+  // Every row is a tug-of-war on the gap, with the even line marked, so small counts
+  // (0 vs 1 big play) read as a slight edge rather than all-or-nothing
   const bar = (label, a, b, scale, f) => edgeBar({ label, a, b, scale, display: [f(a), f(b)] });
 
   el.append(h('div', { class: 'card stat-compare' },
@@ -231,8 +234,8 @@ export function drawEPA(el, d, model) {
     bar('EPA per play', A.perPlay, B.perPlay, 0.3, n2),
     bar('Pass EPA per play', A.pass, B.pass, 0.4, n2),
     bar('Rush EPA per play', A.rush, B.rush, 0.3, n2),
-    statBar({ label: 'Success rate', home: A.success ?? 0, away: B.success ?? 0, display: [p0(A.success), p0(B.success)] }),
-    statBar({ label: 'Big plays (EPA 2+)', home: A.explosive ?? 0, away: B.explosive ?? 0, display: [String(A.explosive ?? 0), String(B.explosive ?? 0)] }),
+    bar('Success rate', A.success ?? 0, B.success ?? 0, 0.25, p0),
+    bar('Big plays (EPA 2+)', A.explosive ?? 0, B.explosive ?? 0, 5, (v) => String(v ?? 0)),
     bar('Total EPA', A.total, B.total, 15, (v) => fmtEPA(v) || '0.0')));
 
   // Running total

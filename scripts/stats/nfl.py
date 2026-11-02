@@ -19,7 +19,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
-from common import (Elo, SourceError, add_home_edge, http_get, least_squares_ratings, log5, now_iso,
+from common import (merge_splits, venue_splits, Elo, SourceError, add_home_edge, http_get, least_squares_ratings, log5, now_iso,
                     pythag, r, ranks, read_json, season_file, season_year)
 
 GAMES_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
@@ -72,7 +72,7 @@ def elo_through(df: pd.DataFrame, upto_season: int):
 def pbp_aggregates(season: int, log):
     cols = ["season_type", "week", "game_id", "posteam", "defteam", "play_type", "pass", "rush", "epa", "success", "yards_gained",
             "down", "wp", "cpoe", "interception", "fumble_lost", "third_down_converted", "third_down_failed", "sack",
-            "fixed_drive", "fixed_drive_result", "drive_inside20"]
+            "fixed_drive", "fixed_drive_result", "drive_inside20", "home_team", "location"]
     import pyarrow.parquet as pq
     raw = http_get(PBP_URL.format(season=season), timeout=180)
     have = set(pq.read_schema(io.BytesIO(raw)).names)
@@ -133,13 +133,31 @@ def pbp_aggregates(season: int, log):
         for t, v in rz.groupby("defteam").td.mean().items():
             out[t]["d_rz"] = r(v, 3)
 
+    # Home / away efficiency (neutral-site games left out)
+    splits = {}
+    if "home_team" in plays and "location" in plays:
+        p2 = plays[plays.location.fillna("Home") != "Neutral"].copy()
+        p2["home_team"] = p2.home_team.replace(ALIASES)
+        p2["o_venue"] = np.where(p2.posteam == p2.home_team, "home", "away")
+        p2["d_venue"] = np.where(p2.defteam == p2.home_team, "home", "away")
+        for prefix, team_col, venue_col in (("o", "posteam", "o_venue"), ("d", "defteam", "d_venue")):
+            gb = p2.groupby([team_col, venue_col])
+            stats = {
+                f"{prefix}_epa": gb.epa.mean(), f"{prefix}_sr": gb.success.mean(), f"{prefix}_expl": gb.explosive.mean(),
+                f"{prefix}_pass_epa": p2[p2["pass"] == 1].groupby([team_col, venue_col]).epa.mean(),
+                f"{prefix}_rush_epa": p2[p2["rush"] == 1].groupby([team_col, venue_col]).epa.mean(),
+            }
+            for k, ser in stats.items():
+                for (t, venue), v in ser.items():
+                    splits.setdefault(t, {}).setdefault(venue, {})[k] = r(v, 3)
+
     # Per-game EPA log (for trend charts)
     glog = defaultdict(list)
     o = plays.groupby(["week", "game_id", "posteam"]).agg(epa=("epa", "mean"), opp=("defteam", "first")).reset_index()
     d = plays.groupby(["game_id", "defteam"]).epa.mean()
     for row in o.itertuples():
         glog[row.posteam].append([int(row.week), row.opp, r(row.epa, 3), r(d.get((row.game_id, row.posteam)), 3)])
-    return out, glog
+    return out, glog, splits
 
 
 def simulate(season_df: pd.DataFrame, strength: dict, log):
@@ -231,6 +249,9 @@ def compute(season: int, full: bool, log) -> dict:
         for me, opp, pf, pa in ((g.home_team, g.away_team, g.home_score, g.away_score), (g.away_team, g.home_team, g.away_score, g.home_score)):
             rec[me][0 if pf > pa else 1 if pf < pa else 2] += 1
             pts[me][0] += pf; pts[me][1] += pa
+    splits = venue_splits([row for g in done_reg.itertuples() for row in (
+        (g.home_team, None if g.location == "Neutral" else "home", g.home_score, g.away_score),
+        (g.away_team, None if g.location == "Neutral" else "away", g.away_score, g.home_score))])
     games_played = {t: sum(rec[t]) for t in TEAMS}
     pyth = {t: pythag(pts[t][0], pts[t][1], PYTH_EXP) if games_played[t] else 0.5 for t in TEAMS}
     strength = {t: (pyth[t] * games_played[t] + 0.5 * 4) / (games_played[t] + 4) for t in TEAMS}
@@ -239,17 +260,19 @@ def compute(season: int, full: bool, log) -> dict:
     prev = read_json(season_file("nfl", season), {}) or {}
     status = {}
     try:
-        eff, glog = pbp_aggregates(season, log)
+        eff, glog, eff_splits = pbp_aggregates(season, log)
         status["pbp"] = "ok"
     except SourceError as e:
         status["pbp"] = str(e)
         eff = {t["abbr"]: {k: v for k, v in t["v"].items() if k.startswith(("o_", "d_")) or k in ("ed_pass", "cpoe", "to_margin", "sacks", "sacks_allowed")} for t in prev.get("teams", [])}
         glog = {t["abbr"]: t.get("log", []) for t in prev.get("teams", [])}
+        eff_splits = {t["abbr"]: {vn: {k: x for k, x in d.items() if k.startswith(("o_", "d_"))} for vn, d in t.get("splits", {}).items()} for t in prev.get("teams", [])}
 
     odds = None
     if season == season_year("nfl"):
         odds = simulate(sdf, strength, log)
 
+    merge_splits(splits, eff_splits)
     srs_rank = ranks(srs)
     teams = []
     for t in sorted(TEAMS, key=lambda t: -srs[t]):
@@ -259,14 +282,14 @@ def compute(season: int, full: bool, log) -> dict:
             "srs": r(srs[t], 2), "srs_rank": srs_rank.get(t),
             "srs_chg": r(srs[t] - hist[t][-2][0], 2) if len(hist[t]) >= 2 else None,
             "elo": r(elo.get(t), 0), "wins": w, "losses": l, "ties": tie,
-            "pd": int(pts[t][0] - pts[t][1]), "ppg": r(pts[t][0] / gp, 1) if gp else None, "papg": r(pts[t][1] / gp, 1) if gp else None,
+            "pd": int(pts[t][0] - pts[t][1]), "win_pct": r((w + 0.5 * tie) / gp, 3) if gp else None, "ppg": r(pts[t][0] / gp, 1) if gp else None, "papg": r(pts[t][1] / gp, 1) if gp else None,
             "pyth_w": r(pyth[t] * gp, 1) if gp else None, "luck": r(w + 0.5 * tie - pyth[t] * gp, 1) if gp else None,
         }
         v.update({k: val for k, val in eff.get(t, {}).items() if val is not None})
         if odds:
             v.update(odds[t])
         teams.append({"id": ESPN_ID[t], "abbr": t, "div": DIV_OF[t], "record": f"{w}-{l}" + (f"-{tie}" if tie else ""),
-                      "v": v, "hist": hist.get(t, []), "log": glog.get(t, [])})
+                      "v": v, "hist": hist.get(t, []), "log": glog.get(t, []), "splits": splits.get(t, {})})
 
     return {
         "league": "nfl", "season": season, "generatedAt": now_iso(),

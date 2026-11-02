@@ -619,6 +619,9 @@ details.gloss[open] summary .chev { transform: rotate(90deg); }
 .team-card .tc-live { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .team-card .tc-live .sc { font: 700 28px/32px var(--font-display); font-variant-numeric: tabular-nums; }
 .team-card .tc-live .sc .opp { color: var(--ink-muted); }
+.team-card .tc-score { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.team-card .tc-opp { display: inline-flex; align-items: center; gap: var(--space-1); font: 600 13px/18px var(--font-sans); color: var(--ink-muted); white-space: nowrap; }
+.team-card .tc-opp .crest.sm { width: 20px; height: 20px; }
 .team-card .tc-loading { height: 44px; }
 .section-header + div > .group-label:first-child { margin-top: 0; }
 .scorecard .sc-comp { flex: 1; min-width: 0; }
@@ -896,7 +899,7 @@ table.stats td.team .st-name { min-width: 0; overflow: hidden; text-overflow: el
 .scatter-pick .sp-open { height: var(--control-sm); padding: 0 var(--space-3); border: 1px solid var(--line-strong); flex: none; }
 
 /* ---------- Worth watching ---------- */
-.watch-why { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-4) var(--space-3); border-top: 1px solid var(--line); }
+.watch-why { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
 .watch-why .lg { font: 700 11px/16px var(--font-display); letter-spacing: 1px; text-transform: uppercase; color: var(--ink-muted); }
 .watch-why .why { flex-basis: 100%; font: 600 13px/18px var(--font-sans); color: var(--ink); }
 
@@ -935,3 +938,34 @@ table.stats td.team .st-name { min-width: 0; overflow: hidden; text-overflow: el
 /* Tug-of-war comparison for signed values: the split follows the gap; tick marks even */
 .statbar.edge .sb-track { position: relative; }
 .statbar.edge .sb-mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); opacity: 0.6; }
+
+/* Tables: the last column keeps the card's inset instead of touching its edge */
+table.stats th:last-child, table.stats td:last-child { padding-right: var(--space-4); }
+table.stats th:first-child, table.stats td:first-child { padding-left: var(--space-4); }
+/* Box scores: tighter number columns so wide sections (defense) fit on a phone */
+.box-section table.stats th:not(:first-child), .box-section table.stats td:not(:first-child) { padding-left: var(--space-2); padding-right: var(--space-2); }
+.box-section table.stats th:last-child, .box-section table.stats td:last-child { padding-right: var(--space-4); }
+.box-section table.stats th { letter-spacing: 0.5px; }
+.box-section table.stats td:first-child { max-width: 140px; }
+.box-section.wide table.stats th:not(:first-child), .box-section.wide table.stats td:not(:first-child) { padding-left: 5px; padding-right: 5px; }
+.box-section.wide table.stats th:last-child, .box-section.wide table.stats td:last-child { padding-right: var(--space-3); }
+.box-section.wide table.stats td { font-size: 13px; }
+
+/* Roster filters */
+.roster-controls { margin: 0 var(--gutter) var(--space-3); }
+.roster-search { width: 100%; height: var(--control-md); padding: 0 var(--space-3); background: var(--surface-sunken); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font: 500 16px/20px var(--font-sans); }
+.roster-search::placeholder { color: var(--ink-muted); }
+.roster-search:focus { outline: 2px solid var(--podium); outline-offset: 1px; }
+.roster-sort { display: flex; align-items: center; gap: var(--space-3); margin: 0 var(--gutter) var(--space-2); }
+.roster-sort .choice { flex: 1; }
+
+/* Home / away toggles */
+.venue-bar { display: flex; padding: 0 var(--gutter); margin: var(--space-3) 0 var(--space-1); }
+.group-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.group-label-row .choice { text-transform: none; letter-spacing: 0; }
+.venue-summary { margin: var(--space-2) var(--gutter) var(--space-1); font: 400 13px/18px var(--font-sans); color: var(--ink-muted); }
+.venue-summary strong { color: var(--ink); font-weight: 600; }
+.info-row .k .stat-all { display: block; font: 400 11px/14px var(--font-sans); color: var(--ink-faint, var(--ink-muted)); opacity: .8; }
+.ex-venue { display: flex; padding: 0 var(--gutter); margin-bottom: var(--space-3); }
+.ex-venue .choice { flex: 1; }
+.venue-bar .choice { flex: 1; }

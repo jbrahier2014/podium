@@ -166,7 +166,9 @@ function body(team, sched, live, last, next) {
     const me = live.home.team.id === team.id ? live.home : live.away;
     const opp = me === live.home ? live.away : live.home;
     return h('div', { class: 'tc-live' },
-      h('span', { class: 'sc' }, `${me.score ?? 0}`, h('span', { class: 'opp' }, `–${opp.score ?? 0} ${opp.team.abbr}`)),
+      h('div', { class: 'tc-score' },
+        h('span', { class: 'sc' }, `${me.score ?? 0}`, h('span', { class: 'opp' }, `\u2013${opp.score ?? 0}`)),
+        h('span', { class: 'tc-opp' }, live.home === me ? 'vs' : 'at', crest(opp.team, 'sm'), opp.team.abbr)),
       badge(`Live · ${live.status.detail}`, 'live'));
   }
 

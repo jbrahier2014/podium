@@ -181,7 +181,10 @@ export function chips(items, value, onChange, { label = 'Filter' } = {}) {
  * lowerIsBetter flips which side leads (e.g. turnovers).
  */
 export function statBar({ label, home, away, format = (v) => v, lowerIsBetter = false, display }) {
-  const total = Math.abs(home) + Math.abs(away) || 1;
+  // Small counts (turnovers, sacks: 0 vs 1) get one extra on each side so the split
+  // reads 33/67 rather than 0/100; larger numbers are plain shares
+  const pad = Math.max(Math.abs(home), Math.abs(away)) <= 5 && Number.isInteger(home) && Number.isInteger(away) ? 1 : 0;
+  const total = Math.abs(home) + Math.abs(away) + 2 * pad || 1;
   const homeLeads = lowerIsBetter ? home < away : home > away;
   const awayLeads = lowerIsBetter ? away < home : away > home;
   return h('div', { class: 'statbar' },
@@ -190,8 +193,9 @@ export function statBar({ label, home, away, format = (v) => v, lowerIsBetter = 
       h('span', { class: 'sb-name' }, label),
       h('span', { class: `sb-val${awayLeads ? '' : ' trail'}` }, display ? display[1] : format(away))),
     h('div', { class: 'sb-track' },
-      h('span', { class: `sb-seg${homeLeads ? ' lead' : ''}`, style: { flex: String(Math.abs(home) / total || 0.5) } }),
-      h('span', { class: `sb-seg${awayLeads ? ' lead' : ''}`, style: { flex: String(Math.abs(away) / total || 0.5) } })));
+      // Longer bar = better side: for lower-is-better stats the shares swap
+      h('span', { class: `sb-seg${homeLeads ? ' lead' : ''}`, style: { flex: String((Math.abs(lowerIsBetter ? away : home) + pad) / total || 0.5) } }),
+      h('span', { class: `sb-seg${awayLeads ? ' lead' : ''}`, style: { flex: String((Math.abs(lowerIsBetter ? home : away) + pad) / total || 0.5) } })));
 }
 
 /**

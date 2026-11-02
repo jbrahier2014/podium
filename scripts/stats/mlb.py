@@ -18,7 +18,7 @@ from datetime import date
 
 import numpy as np
 
-from common import (SourceError, add_home_edge, get_csv_text, get_json, log5, now_iso, pythag, r, ranks,
+from common import (merge_splits, venue_splits, SourceError, add_home_edge, get_csv_text, get_json, log5, now_iso, pythag, r, ranks,
                     read_json, season_file, season_year)
 
 API = "https://statsapi.mlb.com/api/v1"
@@ -156,7 +156,7 @@ def compute(season: int, full: bool, log) -> dict:
     # --- team stats
     try:
         hit = team_stats(season, "hitting"); pit = team_stats(season, "pitching")
-        hsplit = team_stats(season, "hitting", "vl,vr,h,a"); psplit = team_stats(season, "pitching", "sp,rp")
+        hsplit = team_stats(season, "hitting", "vl,vr,h,a"); psplit = team_stats(season, "pitching", "sp,rp,h,a")
         status["statsapi"] = "ok"
     except SourceError as e:
         raise SourceError(f"MLB Stats API team stats: {e}")
@@ -198,6 +198,26 @@ def compute(season: int, full: bool, log) -> dict:
     pyth = {t: pythag(stand.get(t, {}).get("rs", 0), stand.get(t, {}).get("ra", 0), PYTH_EXP) for t in ids}
     odds = simulate(ids, info, stand, pyth, remaining, log) if remaining else None
 
+    # --- home / away: results from the schedule, hitting and pitching from the split stats
+    splits = venue_splits([row for _, h, a, hs_, as_ in finals for row in ((h, "home", hs_, as_), (a, "away", as_, hs_))],
+                          pts_keys=("rpg", "rapg", "rd"))
+    for t in ids:
+        for code, vn in (("h", "home"), ("a", "away")):
+            hh = hsplit.get(t, {}).get(code); pp = psplit.get(t, {}).get(code)
+            vals = {}
+            if hh:
+                pa_ = num(hh.get("plateAppearances"))
+                vals.update({"avg": r(num(hh.get("avg"), None), 3), "obp": r(num(hh.get("obp"), None), 3), "slg": r(num(hh.get("slg"), None), 3),
+                             "ops": r(num(hh.get("ops"), None), 3), "woba": r(woba(hh), 3),
+                             "iso": r(num(hh.get("slg"), 0) - num(hh.get("avg"), 0), 3),
+                             "k_pct": r(num(hh.get("strikeOuts")) / pa_, 3) if pa_ else None, "bb_pct": r(num(hh.get("baseOnBalls")) / pa_, 3) if pa_ else None})
+            if pp:
+                bf_ = num(pp.get("battersFaced")); ip_ = outs_of(pp) / 3
+                vals.update({"era": r(era(pp), 2), "fip": r(fip(pp), 2), "whip": r(num(pp.get("whip"), None), 2),
+                             "kbb_pct": r((num(pp.get("strikeOuts")) - num(pp.get("baseOnBalls"))) / bf_, 3) if bf_ else None,
+                             "hr9": r(9 * num(pp.get("homeRuns")) / ip_, 2) if ip_ else None})
+            merge_splits(splits, {t: {vn: vals}})
+
     out_teams = []
     for t in ids:
         s = stand.get(t, {"w": 0, "l": 0, "rs": 0, "ra": 0})
@@ -206,7 +226,7 @@ def compute(season: int, full: bool, log) -> dict:
         hs = hsplit.get(t, {}); ps = psplit.get(t, {})
         pa = num(h.get("plateAppearances")); bf = num(p.get("battersFaced")); ip = outs_of(p) / 3
         v = {
-            "wins": s["w"], "losses": s["l"], "rd": s["rs"] - s["ra"],
+            "wins": s["w"], "losses": s["l"], "rd": s["rs"] - s["ra"], "win_pct": r(s["w"] / gp, 3) if gp else None,
             "rpg": r(s["rs"] / gp, 2) if gp else None, "rapg": r(s["ra"] / gp, 2) if gp else None,
             "pyth_w": r(pyth[t] * gp, 1), "pyth_l": r((1 - pyth[t]) * gp, 1), "luck": r(s["w"] - pyth[t] * gp, 1),
             "one_run": s.get("one_run"), "extra": s.get("extra"),
@@ -242,7 +262,7 @@ def compute(season: int, full: bool, log) -> dict:
             "lg": LEAGUE_ABBR.get(ti["league"]["id"]), "div": DIVISIONS.get(ti["division"]["id"]),
             "record": f"{s['w']}-{s['l']}", "v": v, "hist": hist.get(t, []),
             "months": [[m, f"{wl[0]}-{wl[1]}"] for m, wl in months[t].items()],
-            "log": glog.get(t, []),
+            "log": glog.get(t, []), "splits": splits.get(t, {}),
         })
 
     rank_rd = ranks({t["id"]: t["v"]["rd"] for t in out_teams})

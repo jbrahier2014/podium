@@ -1,5 +1,5 @@
-// "Worth watching": on busy days, the games most likely to be close, competitive
-// or dramatic among today's games. Home shows them at the top of Today and leaves
+// "Worth watching": on busy days, your teams' games, close finishes, and ranked or
+// relevant teams in close games. Home shows them at the top of Today and leaves
 // them out of the league lists below, so no game appears twice.
 //
 // Live games score on how close they are (ESPN's live win probability when it has
@@ -93,23 +93,90 @@ export function interest(g, rx) {
 const ordinalInning = (n) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'} inning`;
 
 /**
- * On busy days, the standouts among today's games for Home's "Worth watching" group.
- * games: today's games (any league). Only live and upcoming games qualify; your
- * teams' games are always included. Returns [{ game, score, reasons, mine }],
- * live first, then by start time.
+ * On busy days, the games for Home's "Worth watching" group. Strict: a game gets in
+ * only one of three ways, and everything else stays in the league lists.
+ *   1. Your teams' games (always).
+ *   2. Close finishes, any teams: 4th quarter / OT within one score (8 points), or
+ *      the 8th inning on within 2 runs.
+ *   3. Ranked or relevant teams in a close game. Relevant = AP Top 25 (college),
+ *      top 10 by SRS (NFL), postseason (MLB). Live: within one score / 2 runs, or a
+ *      win chance between 30% and 70%. Upcoming: two relevant teams meeting, or a
+ *      relevant team with a line of 3 or less.
+ * Returns [{ game, tier, reasons, mine }]: yours, then close finishes, then the rest
+ * (live before upcoming, then by start time).
  */
 export async function pickFromGames(games, { featuredIds = new Set(), limit = 5 } = {}) {
   const open = games.filter((g) => g.status.state === 'in' || g.status.state === 'pre');
   const leagues = [...new Set(open.map((g) => g.league))].filter((l) => l !== 'mlb');
   const rxs = {};
   await Promise.all(leagues.map((l) => getRatings(l).then((d) => { rxs[l] = ratingsIndex(d, l); }).catch(() => {})));
-  const scored = open.map((g) => {
-    const { score, reasons } = interest(g, rxs[g.league]);
-    const mine = featuredIds.has(`${g.league}:${g.home?.team.id}`) || featuredIds.has(`${g.league}:${g.away?.team.id}`);
-    return { game: g, score: score + (g.status.state === 'in' ? 20 : 0), reasons, mine };
-  });
-  const mine = scored.filter((x) => x.mine);
-  const rest = scored.filter((x) => !x.mine && x.score >= 35 && x.reasons.length).sort((a, b) => b.score - a.score);
-  const picks = [...mine, ...rest.slice(0, Math.max(0, limit - mine.length))];
-  return picks.sort((a, b) => (a.game.status.state === 'in' ? 0 : 1) - (b.game.status.state === 'in' ? 0 : 1) || Date.parse(a.game.start) - Date.parse(b.game.start));
+  const picks = [];
+  for (const g of open) {
+    const H = g.home; const A = g.away;
+    if (!H || !A) continue;
+    const mine = featuredIds.has(`${g.league}:${H.team.id}`) || featuredIds.has(`${g.league}:${A.team.id}`);
+    const c = classify(g, rxs[g.league]);
+    if (mine) picks.push({ game: g, tier: 0, mine, reasons: ['Your team', ...(c?.reasons || [])].slice(0, 2) });
+    else if (c) picks.push({ game: g, tier: c.tier, mine, reasons: c.reasons });
+  }
+  const live = (x) => (x.game.status.state === 'in' ? 0 : 1);
+  picks.sort((a, b) => a.tier - b.tier || live(a) - live(b) || Date.parse(a.game.start) - Date.parse(b.game.start));
+  const yours = picks.filter((x) => x.mine);
+  return [...yours, ...picks.filter((x) => !x.mine).slice(0, Math.max(0, limit - yours.length))];
+}
+
+/** null, or { tier: 1 (close finish) | 2 (relevant + close), reasons } */
+export function classify(g, rx) {
+  const H = g.home; const A = g.away;
+  const margin = Math.abs((H.score ?? 0) - (A.score ?? 0));
+  const live = g.status.state === 'in';
+
+  if (g.league === 'mlb') {
+    const inn = g.inning || 1;
+    const series = g.postseason && g.note ? g.note.replace(/\s*·.*$/, '') : null;
+    const closeNote = margin === 0 ? `Tied, ${ordinalInning(inn)}` : `${margin}-run game, ${ordinalInning(inn)}`;
+    if (live && inn >= 8 && margin <= 2) return { tier: 1, reasons: [inn > 9 ? `Extra innings, ${margin === 0 ? 'tied' : `${margin}-run game`}` : `Close finish: ${closeNote}`, series].filter(Boolean) };
+    if (!g.postseason) return null;
+    if (live) return margin <= 2 ? { tier: 2, reasons: [series || 'Postseason', closeNote] } : null;
+    return { tier: 2, reasons: [series || 'Postseason'] };
+  }
+
+  // Football
+  const rank = (s) => (s.team.rank && s.team.rank <= 25 ? s.team.rank : null);
+  const pct = (s) => { const t = rx?.map.get(String(s.team.id)); return t && t.v[rx.key] != null ? rx.pctOf(t.v[rx.key]) : null; };
+  const relevant = (s) => (g.league === 'cfb' ? rank(s) != null : (pct(s) ?? 0) >= 0.69);
+  const tag = (s) => (g.league === 'cfb' && rank(s) ? `#${rank(s)} ${s.team.short || s.team.name}` : s.team.short || s.team.name);
+  const relH = relevant(H); const relA = relevant(A);
+
+  if (live) {
+    const p = g.status.period || 1;
+    const wp = g.winProbHome;
+    const wpNote = wp != null ? `Win chance ${pctLabel(Math.max(wp, 1 - wp))} for ${wp >= 0.5 ? H.team.abbr : A.team.abbr}` : null;
+    if (p > 4 || (p === 4 && margin <= 8)) {
+      return { tier: 1, reasons: [p > 4 ? 'Overtime' : margin === 0 ? 'Close finish: tied in the 4th' : `Close finish: ${margin}-point game in the 4th`, wpNote].filter(Boolean).slice(0, 2) };
+    }
+    if (!(relH || relA)) return null;
+    const tight = margin <= 8 || (wp != null && wp >= 0.3 && wp <= 0.7);
+    if (!tight) return null;
+    const who = relH && relA ? (g.league === 'cfb' ? `${tag(A)} vs ${tag(H)}` : 'Two top-10 teams by SRS') : `${tag(relH ? H : A)} in a close one`;
+    return { tier: 2, reasons: [who, margin <= 8 ? (margin === 0 ? 'Tied' : `${margin}-point game`) : wpNote].filter(Boolean) };
+  }
+
+  // Upcoming
+  let line = g.odds?.line; let lineText = g.odds?.text || null;
+  if (line == null && rx) {
+    const h = rx.map.get(String(H.team.id)); const a = rx.map.get(String(A.team.id));
+    if (h && a && h.v[rx.key] != null && a.v[rx.key] != null) {
+      const m = h.v[rx.key] - a.v[rx.key] + (g.neutral ? 0 : rx.hfa);
+      line = Math.abs(m); lineText = `Podium line: ${m >= 0 ? H.team.abbr : A.team.abbr} by ${Math.max(0.5, Math.round(Math.abs(m) * 2) / 2)}`;
+    }
+  }
+  const lineNote = line == null ? null : line === 0 ? 'Pick’em' : lineText;
+  if (relH && relA) {
+    return { tier: 2, reasons: [g.league === 'cfb' ? `#${Math.min(rank(H), rank(A))} vs #${Math.max(rank(H), rank(A))}` : 'Two top-10 teams by SRS', lineNote].filter(Boolean) };
+  }
+  if ((relH || relA) && line != null && line <= 3) {
+    return { tier: 2, reasons: [`${tag(relH ? H : A)}, toss-up`, lineNote].filter(Boolean) };
+  }
+  return null;
 }

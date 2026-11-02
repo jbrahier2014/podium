@@ -14,7 +14,7 @@ const svg = (tag, attrs = {}, ...kids) => {
   return el;
 };
 const MINUS = '−';
-export const fmtRV = (v, d = 2) => (v == null ? '' : `${v >= 0 ? '+' : MINUS}${Math.abs(v).toFixed(d)}`);
+export const fmtRV = (v, d = 2) => { if (v == null) return ''; const x = Number(Math.abs(v).toFixed(d)) === 0 ? 0 : v; return `${x > 0 ? '+' : x < 0 ? MINUS : ''}${Math.abs(x).toFixed(d)}`; };
 const fmtRE = (v) => v.toFixed(2);
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const ZONE_LABEL = { heart: 'Heart', shadow: 'Shadow', chase: 'Chase', waste: 'Waste' };

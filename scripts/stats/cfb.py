@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from common import (Elo, SourceError, get_json, least_squares_ratings, now_iso, r, ranks,
+from common import (merge_splits, venue_splits, Elo, SourceError, get_json, least_squares_ratings, now_iso, r, ranks,
                     read_json, season_file, season_year, write_json)
 
 API = "https://api.collegefootballdata.com"
@@ -154,6 +154,8 @@ def compute(season: int, full: bool, log) -> dict:
             for n in (25, 50):
                 if orank and orank <= n:
                     vs[n][me][0 if mm > 0 else 1] += 1
+    splits = venue_splits([row for _, h, a, m, neu, hp, ap in games for row in (
+        (h, None if neu else "home", hp, ap), (a, None if neu else "away", ap, hp)) if row[0] != FCS])
     sos = {t: (float(np.mean([pred[o] for o in opps[t]])) if opps[t] else None) for t in fbs}
     sos_rank = ranks(sos)
 
@@ -252,6 +254,36 @@ def compute(season: int, full: bool, log) -> dict:
         except SourceError as e:
             status["drives"] = str(e); keep_previous(["o_rz", "d_rz"])
 
+        # Home / away efficiency: per-game advanced stats joined to each game's venue
+        try:
+            venue = {}
+            for x in raw:
+                if g(x, "neutralSite", "neutral_site"):
+                    continue
+                gid = g(x, "id")
+                venue[(gid, str(g(x, "homeId", "home_id")))] = "home"
+                venue[(gid, str(g(x, "awayId", "away_id")))] = "away"
+            acc = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0.0, 0.0])))  # team -> venue -> key -> [sum, plays]
+            for row in cfbd("/stats/game/advanced", year=season, excludeGarbageTime="true"):
+                tid = name_to_id.get(row.get("team"))
+                vn = venue.get((g(row, "gameId", "game_id"), tid)) if tid else None
+                if not vn:
+                    continue
+                for side, p in (("offense", "o"), ("defense", "d")):
+                    s_ = row.get(side) or {}
+                    for key, node_, field in ((f"{p}_epa", s_, "ppa"), (f"{p}_sr", s_, "successRate"), (f"{p}_expl", s_, "explosiveness"),
+                                              (f"{p}_pass_epa", s_.get("passingPlays") or {}, "ppa"), (f"{p}_rush_epa", s_.get("rushingPlays") or {}, "ppa"),
+                                              (f"{p}_pass_sr", s_.get("passingPlays") or {}, "successRate"), (f"{p}_rush_sr", s_.get("rushingPlays") or {}, "successRate")):
+                        val = node_.get(field); n = node_.get("plays") or s_.get("plays") or 0
+                        if val is not None and n:
+                            a_ = acc[tid][vn][key]; a_[0] += val * n; a_[1] += n
+            merge_splits(splits, {t: {vn: {k: r(sm / n, 3) for k, (sm, n) in ks.items() if n} for vn, ks in vs.items()} for t, vs in acc.items()})
+            status["game_advanced"] = "ok"
+        except SourceError as e:
+            status["game_advanced"] = str(e)
+            for t in prev_out.get("teams", []):
+                merge_splits(splits, {t["id"]: {vn: {k: x for k, x in d.items() if k.startswith(("o_", "d_"))} for vn, d in t.get("splits", {}).items()}})
+
         # Talent and returning production change once a year: refresh weekly at most
         fetched = prev_out.get("fetched", {})
         stale = lambda k: season < season_year("cfb") or not fetched.get(k) or (datetime.now(timezone.utc) - datetime.fromisoformat(fetched[k].replace("Z", "+00:00"))).days >= 7
@@ -279,6 +311,8 @@ def compute(season: int, full: bool, log) -> dict:
             keep_previous(["ret_ppa", "ret_usage"])
     else:
         fetched = prev_out.get("fetched", {})
+        for t in prev_out.get("teams", []):
+            merge_splits(splits, {t["id"]: {vn: {k: x for k, x in d.items() if k.startswith(("o_", "d_"))} for vn, d in t.get("splits", {}).items()}})
         keep_previous(["sp", "sp_off", "sp_def", "o_ypp", "d_ypp", "to_margin", "o_3rd", "d_3rd", "sacks", "sacks_allowed",
                        "o_rz", "d_rz", "talent", "ret_ppa", "ret_usage"])
 
@@ -295,10 +329,10 @@ def compute(season: int, full: bool, log) -> dict:
             "sos": r(sos[t], 2), "sos_rank": sos_rank.get(t),
             "top25": f"{vs[25][t][0]}-{vs[25][t][1]}", "top50": f"{vs[50][t][0]}-{vs[50][t][1]}",
             "wins": w, "losses": l, "ppg": r(pf / gp, 1) if gp else None, "papg": r(pa / gp, 1) if gp else None,
-            "pd": pf - pa,
+            "pd": pf - pa, "win_pct": r(w / (w + l), 3) if w + l else None,
         }
         v.update({k: val for k, val in extra.get(t, {}).items() if val is not None})
-        teams.append({"id": t, "name": names.get(t), "conf": conf.get(t), "record": f"{w}-{l}", "v": v, "hist": hist.get(t, [])})
+        teams.append({"id": t, "name": names.get(t), "conf": conf.get(t), "record": f"{w}-{l}", "v": v, "hist": hist.get(t, []), "splits": splits.get(t, {})})
 
     return {
         "league": "cfb", "season": season, "generatedAt": now_iso(),

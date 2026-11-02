@@ -18,6 +18,7 @@ export const STATS = {
     D('srs', 'Simple Rating System', 'SRS', 'Ratings', 'dec1', true),
     D('sp', 'SP+', 'SP+', 'Ratings', 'dec1', true),
     D('sos', 'Strength of schedule', 'SOS', 'Ratings', 'dec1', true, true),
+    D('win_pct', 'Win %', 'W%', 'Scoring', 'avg', true),
     D('ppg', 'Points per game', 'PPG', 'Scoring', 'dec1', true),
     D('papg', 'Points allowed per game', 'PA/G', 'Scoring', 'dec1', false),
     D('o_epa', 'EPA per play', 'EPA', 'Offense', 'dec3', true, true),
@@ -59,6 +60,7 @@ export const STATS = {
     D('elo', 'Elo rating', 'Elo', 'Ratings', 'int', true),
     D('pyth_w', 'Pythagorean wins', 'Pyth W', 'Ratings', 'dec1', true),
     D('luck', 'Luck (wins minus Pythagorean)', 'Luck', 'Ratings', 'signed1', null),
+    D('win_pct', 'Win %', 'W%', 'Scoring', 'avg', true),
     D('pd', 'Point differential', 'Diff', 'Scoring', 'signed0', true),
     D('ppg', 'Points per game', 'PPG', 'Scoring', 'dec1', true),
     D('papg', 'Points allowed per game', 'PA/G', 'Scoring', 'dec1', false),
@@ -83,6 +85,7 @@ export const STATS = {
     D('to_margin', 'Turnover margin', 'TO +/-', 'Turnovers', 'signed0', true, true),
   ],
   mlb: [
+    D('win_pct', 'Win %', 'W%', 'Results', 'avg', true),
     D('rd', 'Run differential', 'RD', 'Results', 'signed0', true, true),
     D('pyth_w', 'Pythagorean wins', 'Pyth W', 'Results', 'dec1', true),
     D('luck', 'Luck (wins minus Pythagorean)', 'Luck', 'Results', 'signed1', null),
@@ -127,14 +130,13 @@ export function fmt(value, f) {
   if (f === 'rec') return String(value);
   const v = Number(value);
   switch (f) {
+    // Values that round to zero drop their sign (no "-0.0")
+    case 'dec1': case 'dec2': case 'dec3': { const d = Number(f.slice(3)); return (Number(v.toFixed(d)) === 0 ? 0 : v).toFixed(d); }
     case 'pct': return `${(v * 100).toFixed(1)}%`;
     case 'avg': return v.toFixed(3).replace(/^(-?)0\./, '$1.');
     case 'int': return String(Math.round(v));
-    case 'dec1': return v.toFixed(1);
-    case 'dec2': return v.toFixed(2);
-    case 'dec3': return v.toFixed(3);
     case 'signed0': return `${v > 0 ? '+' : ''}${Math.round(v)}`;
-    case 'signed1': return `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
+    case 'signed1': { const x = Number(v.toFixed(1)) === 0 ? 0 : v; return `${x > 0 ? '+' : ''}${x.toFixed(1)}`; }
     default: return String(value);
   }
 }
@@ -163,3 +165,23 @@ export const ordinal = (n) => {
 };
 
 export const SCOPE = { cfb: 'FBS', nfl: 'the NFL', mlb: 'MLB' };
+
+// ---------------------------------------------------------------- home / away
+export const VENUES = [{ id: 'all', label: 'All games' }, { id: 'home', label: 'Home' }, { id: 'away', label: 'Away' }];
+export const VENUE_LABEL = { all: 'all games', home: 'at home', away: 'on the road' };
+
+/** True when the nightly file carries home/away splits. */
+export const hasSplits = (data) => !!data?.teams?.some((t) => t.splits && (t.splits.home || t.splits.away));
+
+/**
+ * The same data with each team's values replaced by its home or road split (venue
+ * 'home' | 'away'); 'all' returns data unchanged. Stats with no split are absent,
+ * so they drop out of pickers and tables.
+ */
+export function splitData(data, venue) {
+  if (!venue || venue === 'all' || !data) return data;
+  return { ...data, venue, teams: data.teams.map((t) => { const s = t.splits?.[venue] || {}; return { ...t, record: s.record || null, v: s, vAll: t.v }; }) };
+}
+
+/** Stat keys that have a value for at least one team in this (split) data. */
+export const keysWithData = (data) => new Set(data.teams.flatMap((t) => Object.keys(t.v).filter((k) => t.v[k] != null)));
