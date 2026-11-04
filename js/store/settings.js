@@ -12,8 +12,14 @@ export const DEFAULT_FEATURED = [
   { league: 'nfl', id: '7', name: 'Denver Broncos', short: 'Broncos', abbr: 'DEN', color: '#fb4f14', altColor: '#002244', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/den.png' },
 ];
 
+// High school teams (Catholic High School League). IDs are MHSAA school page names.
+export const CHSL_FEATURED = [
+  { league: 'chsl', id: 'toledo-st-johns-jesuit-oh', name: "St. John's Jesuit", short: "St. John's Jesuit", abbr: 'SJJ' },
+  { league: 'chsl', id: 'divinechild', name: 'Divine Child', short: 'Divine Child', abbr: 'DC' },
+];
+
 const DEFAULTS = {
-  featured: DEFAULT_FEATURED,
+  featured: [...DEFAULT_FEATURED, ...CHSL_FEATURED],
   refreshSeconds: 30,  // live-score polling interval while games are in progress
   logos: true,        // real team logos (false = Podium color crests)
   theme: 'dark',       // 'dark' (Arena, the default) | 'light' (Daylight) | 'system'
@@ -25,7 +31,14 @@ const listeners = new Set();
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
-    return { ...DEFAULTS, ...saved };
+    const out = { ...DEFAULTS, ...saved };
+    // One-time: add the CHSL teams to a saved list from before high school support
+    if (saved.featured && !saved.chslSeeded) {
+      out.featured = [...saved.featured, ...CHSL_FEATURED.filter((c) => !saved.featured.some((t) => t.league === 'chsl' && t.id === c.id))];
+      out.chslSeeded = true;
+      try { localStorage.setItem(KEY, JSON.stringify(out)); } catch { /* private mode */ }
+    }
+    return out;
   } catch {
     return { ...DEFAULTS };
   }
@@ -57,7 +70,7 @@ export const settings = {
     [list[index], list[j]] = [list[j], list[index]];
     settings.set({ featured: list });
   },
-  resetFeatured() { settings.set({ featured: DEFAULT_FEATURED }); },
+  resetFeatured() { settings.set({ featured: [...DEFAULT_FEATURED, ...CHSL_FEATURED] }); },
 };
 
 /** Apply the theme: Arena (dark) by default, Daylight (light), or follow the phone. */

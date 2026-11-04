@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -41,14 +41,26 @@ jobs:
           FULL_RUN: ${{ (github.event_name != 'schedule' || github.event.schedule == '23 9 * * *') && '1' || '0' }}
         run: python scripts/stats/run.py
       - name: Commit changes
+        # GitHub sometimes answers a push with a brief server error (500) or the branch
+        # moves under us; retry a few times with growing waits before giving up
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data
           if git diff --cached --quiet; then
             echo "No changes."
-          else
-            git commit -m "Update stats ($(date -u +'%Y-%m-%d %H:%M') UTC)"
-            git pull --rebase origin main
-            git push
+            exit 0
           fi
+          git commit -m "Update stats ($(date -u +'%Y-%m-%d %H:%M') UTC)"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "Pushed on attempt $attempt."
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            wait=$((attempt * 30))
+            echo "::warning::Push attempt $attempt failed; retrying in ${wait}s"
+            sleep $wait
+          done
+          echo "::error::Could not push stats after 5 attempts"
+          exit 1

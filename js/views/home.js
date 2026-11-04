@@ -11,7 +11,7 @@ import { settings } from '../store/settings.js';
 import { LEAGUES, inSeason } from '../leagues.js';
 import { getTeamSchedule, getTodayGames, getTeams, getRatings, sortGames, needsLiveUpdates } from '../data/index.js';
 import { STATS, fmt, percentiles, ordinal, SCOPE } from '../data/statdefs.js';
-import { etISODate } from '../util/time.js';
+import { etISODate, addDays } from '../util/time.js';
 import { livePoller } from '../util/poller.js';
 import { crest, badge } from '../ui/components.js';
 import { gameCard, resultLine, nextLine } from '../ui/format.js';
@@ -29,16 +29,18 @@ export default {
     // In-season teams first, keeping your chosen order within each group.
     const teams = [...featured].sort((a, b) => Number(inSeason(b.league)) - Number(inSeason(a.league)));
 
-    const cards = teams.map((t) => ({ team: t, el: h('a', { class: 'team-card', href: `#/team/${t.league}/${t.id}`, style: { '--team': t.color || null } }) }));
+    const cards = teams.map((t) => ({ team: t, el: h('a', { class: 'team-card', href: t.league === 'chsl' ? `#/chsl/team/${t.id}` : `#/team/${t.league}/${t.id}`, style: { '--team': t.color || null } }) }));
     const scroller = h('div', { class: 'featured-scroller' }, cards.map((c) => c.el));
     cards.forEach((c) => drawCard(c.el, c.team, null, null));
 
+    // Your teams' finals from yesterday; hidden when there are none
+    const recent = h('div', { hidden: true });
     const today = h('div', {}, h('div', { class: 'game-list' }, h('div', { class: 'skeleton', style: { height: '112px', borderRadius: 'var(--radius-md)' } })));
     const dyk = h('div', { class: 'card' }, h('div', { class: 'skeleton', style: { height: '96px' } }));
 
     // Nightly ratings for each featured league: power rank on the cards + the daily outlier
     const ratings = {};
-    const ratingLoads = Promise.all([...new Set(teams.map((t) => t.league))].map((l) =>
+    const ratingLoads = Promise.all([...new Set(teams.map((t) => t.league))].filter((l) => l !== 'chsl').map((l) =>
       getRatings(l).then((d) => { ratings[l] = d; }).catch(() => {})));
 
     ctx.el.append(
@@ -47,6 +49,7 @@ export default {
       teams.length
         ? scroller
         : h('div', { class: 'notice' }, 'No featured teams yet. ', h('a', { href: '#/settings' }, 'Add teams')),
+      recent,
       sectionHeader({ title: 'Today', action: 'Scoreboard', href: '#/scores' }),
       today,
       sectionHeader({ title: 'Did you know?' }),
@@ -68,12 +71,16 @@ export default {
     const drawAll = async () => {
       const idx = await cfbIdx;
       if (!ctx.isCurrent()) return;
-      cards.forEach((c) => drawCard(c.el, c.team, schedules.get(c.team), todayGames[c.team.league] || [], idx, powerRank(ratings[c.team.league], c.team)));
+      // High school cards wait for the nightly CHSL data; until then they stay hidden
+      cards.forEach((c) => { c.el.hidden = c.team.league === 'chsl' && !!schedules.get(c.team)?.error; });
+      cards.forEach((c) => drawCard(c.el, c.team, schedules.get(c.team), todayGames[c.team.league] || [], idx,
+        c.team.league === 'chsl' ? schedules.get(c.team)?.rank : powerRank(ratings[c.team.league], c.team)));
       // Teams with a game live or in the next 10 days first (your order otherwise);
       // a team whose season is over, like a club out of the playoffs, moves to the end.
       const ranked = cards.map((c, i) => ({ c, i, active: isActive(schedules.get(c.team), todayGames[c.team.league], c.team) }))
         .sort((a, b) => Number(b.active) - Number(a.active) || a.i - b.i);
       if (ranked.some((r, n) => scroller.children[n] !== r.c.el)) scroller.append(...ranked.map((r) => r.c.el));
+      drawRecent(recent, cards.map((c) => ({ team: c.team, sched: schedules.get(c.team) })));
       const all = Object.values(todayGames).flat();
       const picks = all.length >= BUSY_DAY ? await pickFromGames(all, { featuredIds, limit: 5 }).catch(() => []) : [];
       if (!ctx.isCurrent()) return;
@@ -113,6 +120,8 @@ export default {
 // ---------------------------------------------------------------- featured card
 function drawCard(el, team, sched, todays, cfbIdx, power) {
   clear(el);
+  // High school logos come with the nightly CHSL data, not the saved team
+  if (team.league === 'chsl') team = { ...team, logo: sched?.logo || team.logo || null, logoBox: sched?.logoBox || null, plate: true };
   const league = LEAGUES[team.league];
 
   // Merge the schedule with today's (fresher, possibly live) games.
@@ -154,7 +163,7 @@ function drawCard(el, team, sched, todays, cfbIdx, power) {
 }
 
 // Which rating the Home card ranks on (see powerRank below)
-const RANK_LABEL = { cfb: 'Predictor rank', nfl: 'SRS rank', mlb: 'Pythag rank' };
+const RANK_LABEL = { cfb: 'Predictor rank', nfl: 'SRS rank', mlb: 'Pythag rank', chsl: 'CHSL rank' };
 
 const stat = (k, v) => h('div', { class: 'tc-stat' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
 
@@ -295,6 +304,32 @@ function drawDidYouKnow(el, facts) {
   el.append(h('a', { class: 'dyk', href: `#/team/${fact.team.league}/${fact.team.id}?tab=advanced` },
     crest(fact.team),
     h('div', {}, h('div', { class: 'dyk-text' }, fact.text), h('div', { class: 't-caption', style: { marginTop: 'var(--space-1)' } }, 'See the full fingerprint'))));
+}
+
+// ---------------------------------------------------------------- yesterday
+/**
+ * Final scores from yesterday (Eastern) for your featured teams, newest first.
+ * Today's games are left to the Today section, so nothing shows twice.
+ */
+function drawRecent(el, items) {
+  const yesterday = addDays(etISODate(), -1);
+  const seen = new Set();
+  const games = [];
+  for (const { team, sched } of items) {
+    for (const g of sched?.games || []) {
+      const key = `${g.league}:${g.id}`;
+      if (seen.has(key) || g.day !== yesterday || g.status.state !== 'post' || !g.status.completed) continue;
+      if (g.home.team.id !== String(team.id) && g.away.team.id !== String(team.id)) continue;
+      seen.add(key);
+      games.push(g);
+    }
+  }
+  clear(el);
+  el.hidden = !games.length;
+  if (!games.length) return;
+  games.sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+  el.append(sectionHeader({ title: 'Yesterday' }),
+    h('div', { class: 'game-list' }, games.map((g) => gameCard(g, { showLeague: true }))));
 }
 
 // ---------------------------------------------------------------- worth watching

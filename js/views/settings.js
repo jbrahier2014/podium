@@ -29,7 +29,7 @@ function build() {
     s.featured.length ? s.featured.map((t, i) =>
       h('div', { class: 'list-item' },
         crest(t),
-        h('span', { class: 'grow' }, h('div', { class: 'title' }, t.name), h('div', { class: 'sub' }, LEAGUES[t.league].name)),
+        h('span', { class: 'grow' }, h('div', { class: 'title' }, t.name), h('div', { class: 'sub' }, t.league === 'chsl' ? 'CHSL · add others from the CHSL screen' : LEAGUES[t.league].name)),
         h('button', { class: 'icon-btn', 'aria-label': `Move ${t.short || t.name} up`, disabled: i === 0, onclick: () => settings.moveFeatured(i, -1) }, icon(ICONS.up)),
         h('button', { class: 'icon-btn', 'aria-label': `Remove ${t.short || t.name}`, onclick: () => settings.removeFeatured(t.league, t.id) }, icon(ICONS.minus)),
       ))
@@ -81,7 +81,7 @@ function build() {
       }, 'Clear cache'),
       h('button', {
         class: 'list-item action',
-        onclick: () => { if (confirm('Reset featured teams to Notre Dame, Tigers, Lions and Broncos?')) settings.resetFeatured(); },
+        onclick: () => { if (confirm('Reset featured teams to Notre Dame, Tigers, Lions, Broncos, St. John’s Jesuit and Divine Child?')) settings.resetFeatured(); },
       }, 'Reset featured teams'),
     ),
   ];

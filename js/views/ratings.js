@@ -74,7 +74,7 @@ export default {
     ctx.setTitle('Ratings');
     const controls = h('div');
     const body = h('div', {}, h('div', { class: 'skeleton', style: { height: '320px', margin: '0 var(--gutter)', borderRadius: 'var(--radius-md)' } }));
-    ctx.el.append(...pageTitle('Ratings'), leagueTabs(league, (id) => navigate(`ratings/${id}`, { replace: true })), controls, body);
+    ctx.el.append(...pageTitle('Ratings'), leagueTabs(league, (id) => navigate(`ratings/${id}`, { replace: true }), { chsl: 'ratings' }), controls, body);
 
     let seasons; let data; let teamInfo;
     try {

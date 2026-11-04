@@ -18,6 +18,7 @@ export function statusText(g, { showDay = false } = {}) {
 
 /** One line of context under the teams. */
 export function footText(g) {
+  if (g.league === 'chsl') return g.foot || null;
   const s = g.situation;
   if (g.league === 'mlb') {
     if (g.status.state === 'in' && s) {
@@ -47,7 +48,7 @@ const cardSide = (s) => ({
   name: s.team.short || s.team.name,
   abbr: s.team.abbr,
   color: s.team.color,
-  logo: s.team.logo,
+  logo: s.team.logo, plate: s.team.plate, logoBox: s.team.logoBox,
   score: s.score,
   record: s.record,
   rank: s.team.rank,
@@ -68,7 +69,7 @@ export function gameCard(g, { showLeague = false, showDay = false } = {}) {
     clock: statusText(g, { showDay }),
     home: cardSide(g.home),
     away: cardSide(g.away),
-    href: `#/game/${g.league}/${g.id}`,
+    href: g.href !== undefined ? g.href : `#/game/${g.league}/${g.id}`,
     foot: footText(g),
   });
 }

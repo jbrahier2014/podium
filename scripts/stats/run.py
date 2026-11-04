@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import cfb  # noqa: E402
+import chsl  # noqa: E402
 import ep  # noqa: E402
 import rv  # noqa: E402
 import mlb  # noqa: E402
@@ -35,12 +36,24 @@ def log(msg):
     print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def chsl_step(force=False):
+    try:
+        out = chsl.update(log, force=force)
+    except Exception as e:  # never let high school data break the rest of the job
+        log(f"chsl ERROR {e}")
+        out = {"ok": False, "errors": [f"{type(e).__name__}: {e}"]}
+    files = sorted(p.stem for p in (DATA / "chsl").glob("*.json")) if (DATA / "chsl").exists() else []
+    out.update({"seasons": files, "lastRunAt": now_iso()})
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--leagues", default="cfb,nfl,mlb")
     ap.add_argument("--full", action="store_true", help="refresh everything (nightly run)")
     ap.add_argument("--ep-only", action="store_true", help="only refit the expected-points models")
     ap.add_argument("--rv-only", action="store_true", help="only rebuild the baseball run-expectancy table")
+    ap.add_argument("--chsl-only", action="store_true", help="only refresh the Catholic High School League files")
     args = ap.parse_args()
     full = args.full or os.environ.get("FULL_RUN") == "1"
     weekday_utc = datetime.now(timezone.utc).weekday()  # Mon=0 .. Sun=6
@@ -50,6 +63,11 @@ def main():
     run_leagues = []
     if args.rv_only:
         meta["rv"] = rv.update(log, force=True)
+        write_json(DATA / "meta.json", meta)
+        return
+
+    if args.chsl_only or os.environ.get("CHSL_ONLY") == "1":
+        meta["chsl"] = chsl_step(force=False)
         write_json(DATA / "meta.json", meta)
         return
 
@@ -115,6 +133,9 @@ def main():
             meta["rv"] = rv.update(log)
         except Exception as e:
             log(f"rv ERROR {e}")
+
+    # Catholic High School League (high school football and basketball)
+    meta["chsl"] = chsl_step(force=False)
 
     meta["generatedAt"] = now_iso()
     meta["fullRun"] = full

@@ -22,6 +22,13 @@ export const LEAGUES = {
     window: { start: '03-18', end: '11-08' },
     periodUnit: 'day',
   },
+  // High school (Catholic High School League): football Aug–Nov, basketball Nov–Mar.
+  // Not in LEAGUE_IDS: it has its own screen (#/chsl) and nightly files, not ESPN data.
+  chsl: {
+    id: 'chsl', name: 'CHSL', longName: 'Catholic High School League', sport: 'football',
+    window: { start: '08-15', end: '03-31' },
+    periodUnit: 'week',
+  },
 };
 
 export const LEAGUE_IDS = ['nfl', 'cfb', 'mlb'];

@@ -33,6 +33,7 @@
 
 import * as espn from './providers/espn.js';
 import * as mlb from './providers/mlb.js';
+import * as chsl from './chsl.js';
 import { monthDay } from '../util/time.js';
 import { cachedJSON } from '../store/cache.js';
 import { inSeason, seasonYear } from '../leagues.js';
@@ -86,6 +87,7 @@ export function getScoreboard(league, opts = {}) {
 }
 
 export function getTeamSchedule(league, teamId, opts = {}) {
+  if (league === 'chsl') return track('computed', chsl.getTeamSchedule(teamId));
   const p = league === 'mlb' ? mlb.getTeamSchedule(teamId, opts) : espn.getTeamSchedule(league, teamId, opts);
   return track(sourceFor(league), p);
 }

@@ -38,7 +38,7 @@ export default {
     const body = h('div', {}, skeletonList());
     ctx.el.append(
       ...pageTitle('Scores'),
-      leagueTabs(league, (id) => navigate(`scores/${id}`, { replace: true })),
+      leagueTabs(league, (id) => navigate(`scores/${id}`, { replace: true }), { chsl: 'scores' }),
       controls,
       body,
     );

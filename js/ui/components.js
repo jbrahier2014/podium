@@ -34,10 +34,19 @@ export function inkFor(color) {
 export function crest(team, size = '') {
   const src = settings.get().logos !== false ? logoSrc(team.logo, resolvedTheme(), size) : null;
   if (!src) return plainCrest(team, size);
-  const box = h('span', { class: `crest logo ${size}`.trim(), 'aria-hidden': 'true' });
+  const box = h('span', { class: `crest logo ${size}${team.plate ? ' plate' : ''}`.trim(), 'aria-hidden': 'true' });
   const img = h('img', { src, alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' });
   img.addEventListener('error', () => box.replaceWith(plainCrest(team, size)), { once: true });
-  box.append(img);
+  if (team.logoBox) {
+    // Trim the logo's own margins: scale its visible part to fill the tile's inner square
+    const [l, t, r, b, ar] = team.logoBox;
+    const H = 1 / ar; const cw = r - l; const ch = (b - t) * H; const k = 1 / Math.max(cw, ch);
+    Object.assign(img.style, {
+      position: 'absolute', width: `${k * 100}%`, height: 'auto', maxWidth: 'none',
+      left: `${((1 - cw * k) / 2 - l * k) * 100}%`, top: `${((1 - ch * k) / 2 - t * H * k) * 100}%`,
+    });
+    box.append(h('span', { class: 'logo-fit' }, img));
+  } else box.append(img);
   return box;
 }
 

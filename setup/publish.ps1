@@ -12,6 +12,19 @@ function Done($code) { Stop-Transcript | Out-Null; Read-Host 'Press Enter to clo
 
 Write-Host 'Publishing Podium...' -ForegroundColor Cyan
 
+# Workflow updates from Claude arrive in setup/workflows (Claude can't write into .github
+# directly): move them into place so they're published with everything else
+$wfIn = Join-Path $PSScriptRoot 'workflows'
+if (Test-Path $wfIn) {
+  $wfOut = Join-Path $Root '.github\workflows'
+  New-Item -ItemType Directory -Force -Path $wfOut | Out-Null
+  Get-ChildItem $wfIn -Filter *.yml | ForEach-Object {
+    Move-Item -Force $_.FullName (Join-Path $wfOut $_.Name)
+    Write-Host "Workflow updated: $($_.Name)"
+  }
+  Remove-Item $wfIn -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # If any app file changed, give this release a new version number in sw.js, so phones
 # with Podium on the home screen pick it up (the app reloads itself into new versions).
 $appChanges = @(git status --porcelain | ForEach-Object { $_.Substring(3) } | Where-Object { $_ -notmatch '^(data|setup)/' })

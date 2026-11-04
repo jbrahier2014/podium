@@ -24,6 +24,10 @@ const ROUTES = [
   ['sources', () => import('./views/sources.js')],
   ['standings/:league', () => import('./views/standings.js')],
   ['polls', () => import('./views/polls.js')],
+  ['chsl', () => import('./views/chsl.js')],
+  ['chsl/team/:id', () => import('./views/chsl.js')],
+  ['chsl/:sport', () => import('./views/chsl.js')],
+  ['chsl/:sport/team/:id', () => import('./views/chsl.js')],
   ['team/:league/:id', () => import('./views/team.js')],
   ['game/:league/:id', () => import('./views/game.js')],
 ];

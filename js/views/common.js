@@ -3,6 +3,7 @@
 import { h } from '../util/dom.js';
 import { LEAGUES, leaguesBySeason } from '../leagues.js';
 import { tabs } from '../ui/components.js';
+import { navigate } from '../router.js';
 
 export { sectionHeader, emptyState, listRow } from '../ui/components.js';
 
@@ -13,9 +14,15 @@ export function pageTitle(text, subtitle) {
   return out;
 }
 
-/** NFL / CFB / MLB tabs, in-season leagues first. onPick(leagueId) on change. */
-export function leagueTabs(current, onPick) {
-  return tabs(leaguesBySeason().map((id) => ({ id, label: LEAGUES[id].name })), current, onPick, { label: 'League' });
+/**
+ * NFL / CFB / MLB tabs, in-season leagues first. onPick(leagueId) on change.
+ * chsl: add a CHSL tab that opens the CHSL screen at that section ('scores',
+ * 'standings' or 'ratings'); false leaves it out.
+ */
+export function leagueTabs(current, onPick, { chsl = false } = {}) {
+  const items = leaguesBySeason().map((id) => ({ id, label: LEAGUES[id].name }));
+  if (chsl || current === 'chsl') items.push({ id: 'chsl', label: 'CHSL' });
+  return tabs(items, current, (id) => (id === 'chsl' && current !== 'chsl' ? navigate(`chsl?view=${chsl || 'scores'}`) : onPick(id)), { label: 'League' });
 }
 
 /** The league to show by default: the first in-season one. */

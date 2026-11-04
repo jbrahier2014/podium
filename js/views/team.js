@@ -317,7 +317,7 @@ function scoring(done, id) {
   return { n, w, l, t, record: `${w}-${l}${t ? `-${t}` : ''}`, pf: pf / n, pa: pa / n, diff: pf - pa };
 }
 
-function scheduleRow(g, teamId, isNext) {
+export function scheduleRow(g, teamId, isNext) {
   const me = g.home.team.id === String(teamId) ? g.home : g.away;
   const opp = me === g.home ? g.away : g.home;
   const where = g.neutral ? 'vs' : me === g.home ? 'vs' : 'at';
@@ -328,7 +328,8 @@ function scheduleRow(g, teamId, isNext) {
     right = r ? h('span', { class: 'sched-result' }, r.outcome === 'W' ? badge('W', 'win') : badge(r.outcome), h('span', { class: `num${r.outcome === 'L' ? ' muted' : ''}` }, r.text.split(' ')[0]))
       : h('span', { class: 'detail' }, g.status.detail);
   } else right = h('span', { class: 'detail' }, g.status.detail === 'TBD' ? 'TBD' : etTime(g.start));
-  return h('a', { class: 'list-item sched-row', href: `#/game/${g.league}/${g.id}`, dataset: isNext ? { next: '1' } : {} },
+  const href = g.href !== undefined ? g.href : `#/game/${g.league}/${g.id}`;
+  return h(href ? 'a' : 'div', { class: 'list-item sched-row', href, dataset: isNext ? { next: '1' } : {} },
     h('span', { class: 'sched-date' }, h('span', {}, etDay(g.start)), g.week && g.league !== 'mlb' ? h('span', { class: 'muted' }, g.seasonType === 3 ? (g.note || 'Playoffs') : `Week ${g.week}`) : null),
     crest(opp.team, 'sm'),
     h('span', { class: 'grow' }, h('div', { class: 'title' }, `${where} `, opp.team.rank ? h('span', { class: 'muted' }, `${opp.team.rank} `) : null, opp.team.short || opp.team.name),

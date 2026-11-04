@@ -16,7 +16,7 @@ export default {
     ctx.setTitle('Standings');
     const controls = h('div');
     const body = h('div', {}, h('div', { class: 'skeleton', style: { height: '300px', margin: '0 var(--gutter)', borderRadius: 'var(--radius-md)' } }));
-    ctx.el.append(...pageTitle('Standings'), leagueTabs(league, (id) => navigate(`standings/${id}`, { replace: true })), controls, body);
+    ctx.el.append(...pageTitle('Standings'), leagueTabs(league, (id) => navigate(`standings/${id}`, { replace: true }), { chsl: 'standings' }), controls, body);
 
     let st;
     try { st = await getStandings(league); } catch (err) {

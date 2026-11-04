@@ -969,3 +969,16 @@ table.stats th:first-child, table.stats td:first-child { padding-left: var(--spa
 .ex-venue { display: flex; margin-bottom: var(--space-3); }
 .ex-venue .choice { flex: 1; }
 .venue-bar .choice { flex: 1; }
+
+/* CHSL */
+.chsl-bar { display: flex; margin: var(--space-2) 0 var(--space-3); }
+.chsl-bar .choice { flex: 1; }
+.chsl-tag { align-self: flex-start; margin-top: 2px; font: 700 9px/14px var(--font-sans); letter-spacing: .6px; color: var(--podium); border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; vertical-align: 1px; }
+.leader-row .lr-sub { display: block; font: 400 11px/14px var(--font-sans); color: var(--ink-muted); }
+.chsl-standings table.stats td.team .st-name { white-space: normal; overflow: visible; text-overflow: clip; max-width: none; line-height: 1.2; }
+/* High school logos: many are JPGs on white, so every one sits on the same light plate */
+.crest.logo.plate { background: #fff; border-radius: 6px; position: relative; }
+.crest.logo.plate.lg { border-radius: 10px; }
+/* the logo sits in a box inset 12% on every side (percent padding would follow the row's width) */
+.crest.logo.plate > img, .crest.logo.plate > .logo-fit { position: absolute; inset: 12%; width: 76%; height: 76%; }
+.crest.logo .logo-fit { display: block; overflow: hidden; }
