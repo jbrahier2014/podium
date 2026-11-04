@@ -17,6 +17,7 @@ import { crest, badge } from '../ui/components.js';
 import { gameCard, resultLine, nextLine } from '../ui/format.js';
 import { installTip } from '../ui/install.js';
 import { pickFromGames } from '../data/watch.js';
+import { getCurrentRanks } from '../data/polls.js';
 
 // A day with at least this many games gets a "Worth watching" group in Today
 const BUSY_DAY = 12;
@@ -59,6 +60,8 @@ export default {
     // Team schedules (cached ~10 min) and today's games load in parallel.
     const schedules = new Map();
     const cfbIdx = getTeams('cfb').then(({ teams: list }) => new Map(list.map((t) => [t.id, t]))).catch(() => new Map());
+    // Latest AP / CFP ranks, so each college card can say which poll its rank is from
+    const pollsLoad = cards.some((c) => c.team.league === 'cfb') ? getCurrentRanks().catch(() => null) : Promise.resolve(null);
     const scheduleLoads = cards.map(async (c) => {
       try {
         schedules.set(c.team, await getTeamSchedule(c.team.league, c.team.id));
@@ -70,11 +73,12 @@ export default {
     let todayGames = {};
     const drawAll = async () => {
       const idx = await cfbIdx;
+      const polls = await pollsLoad;
       if (!ctx.isCurrent()) return;
       // High school cards wait for the nightly CHSL data; until then they stay hidden
       cards.forEach((c) => { c.el.hidden = c.team.league === 'chsl' && !!schedules.get(c.team)?.error; });
       cards.forEach((c) => drawCard(c.el, c.team, schedules.get(c.team), todayGames[c.team.league] || [], idx,
-        c.team.league === 'chsl' ? schedules.get(c.team)?.rank : powerRank(ratings[c.team.league], c.team)));
+        c.team.league === 'chsl' ? schedules.get(c.team)?.rank : powerRank(ratings[c.team.league], c.team), polls));
       // Teams with a game live or in the next 10 days first (your order otherwise);
       // a team whose season is over, like a club out of the playoffs, moves to the end.
       const ranked = cards.map((c, i) => ({ c, i, active: isActive(schedules.get(c.team), todayGames[c.team.league], c.team) }))
@@ -118,7 +122,7 @@ export default {
 };
 
 // ---------------------------------------------------------------- featured card
-function drawCard(el, team, sched, todays, cfbIdx, power) {
+function drawCard(el, team, sched, todays, cfbIdx, power, polls = null) {
   clear(el);
   // High school logos come with the nightly CHSL data, not the saved team
   if (team.league === 'chsl') team = { ...team, logo: sched?.logo || team.logo || null, logoBox: sched?.logoBox || null, plate: true };
@@ -157,13 +161,27 @@ function drawCard(el, team, sched, todays, cfbIdx, power) {
     body(team, sched, live, last, next),
     h('div', { class: 'tc-stats' },
       stat('Record', sched?.record || '–'),
-      team.league === 'cfb' ? stat('AP rank', sched ? (rank ? `#${rank}` : 'NR') : '–') : null,
+      team.league === 'cfb' ? pollStat(team.id, polls, rank, sched) : null,
       stat(RANK_LABEL[team.league], power ? `#${power}` : '–')),
   );
 }
 
 // Which rating the Home card ranks on (see powerRank below)
 const RANK_LABEL = { cfb: 'Predictor rank', nfl: 'SRS rank', mlb: 'Pythag rank', chsl: 'CHSL rank' };
+
+// CFB poll rank, labeled by the poll it comes from: the CFP committee's ranking once it's
+// out for the season (AP rank alongside), the AP poll before that. Without poll data,
+// falls back to ESPN's schedule rank, which is unlabeled as to poll, so it says "Rank".
+function pollStat(id, polls, scheduleRank, sched) {
+  const fmt = (r) => (r ? `#${r}` : 'NR');
+  if (polls?.cfp) {
+    const ap = polls.ap.get(String(id));
+    return h('div', { class: 'tc-stat' }, h('div', { class: 'k' }, 'CFP rank'),
+      h('div', { class: 'v' }, fmt(polls.cfp.get(String(id))), h('span', { class: 'tc-sub' }, `AP ${fmt(ap)}`)));
+  }
+  if (polls) return stat('AP rank', fmt(polls.ap.get(String(id))));
+  return stat('Rank', sched ? fmt(scheduleRank) : '–');
+}
 
 const stat = (k, v) => h('div', { class: 'tc-stat' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
 

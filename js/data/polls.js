@@ -20,6 +20,20 @@ const https = (u) => String(u || '').replace(/^http:/, 'https:');
 const teamIdOf = (t) => String(t?.id || (t?.$ref || '').match(/teams\/(\d+)/)?.[1] || '');
 
 /**
+ * The latest AP and CFP ranks by ESPN team id, for labels like Home's team cards:
+ * { ap: Map(id -> rank), cfp: Map(id -> rank) | null }. cfp is null until the committee
+ * releases its first rankings of the season (early November).
+ */
+export async function getCurrentRanks() {
+  const { data } = await cachedJSON(SITE, { ttlMs: 30 * MIN });
+  const byId = (id) => {
+    const p = (data.rankings || []).find((r) => String(r.id) === id);
+    return p ? new Map((p.ranks || []).map((e) => [teamIdOf(e.team), Number(e.current)])) : null;
+  };
+  return { ap: byId(POLLS.ap.id) || new Map(), cfp: byId(POLLS.cfp.id) };
+}
+
+/**
  * Weeks with polls this season, oldest first: [{ key: '2-9', type: 2, week: 9, label: 'Week 9' }, ...].
  * Includes the preseason poll, and the final poll once it's out.
  */
