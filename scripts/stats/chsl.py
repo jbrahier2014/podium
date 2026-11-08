@@ -124,13 +124,47 @@ def mhsaa_schedule(org: int, sport: str, year: int):
                     {"orgId": org, "sportTypeCode": SPORTS[sport]["code"], "gender": "M", "level": "V", "year": year})
 
 
-def sjj_pages(sport: str, year: int) -> tuple[str, str]:
-    """St. John's Jesuit's schedule page (HTML, for logos) and plain-text schedule ('' if not posted)."""
-    page = http_get(f"{SJJ_SITE}/sports/{SPORTS[sport]['page']}/schedule/{season_label(sport, year)}").decode("utf-8", "ignore")
-    m = re.search(r"schedule_txt\.ashx\?schedule=(\d+)", page)
-    if not m:
-        return page, ""
-    return page, http_get(f"{SJJ_SITE}/services/schedule_txt.ashx?schedule={m.group(1)}").decode("utf-8", "ignore")
+# St. John's Jesuit's plain-text schedule ids, per season (from its schedule pages).
+# Used when the page comes back without the link; new seasons are learned from the page.
+SJJ_SCHEDULE_IDS = {("fb", 2025): "227", ("fb", 2026): "257", ("bb", 2025): "237", ("bb", 2026): "269"}
+
+
+def _page_summary(raw: bytes) -> str:
+    """A short description of a page that wasn't what we expected, for the log."""
+    text = raw.decode("utf-8", "ignore")
+    title = re.search(r"(?is)<title>(.*?)</title>", text)
+    snippet = re.sub(r"\s+", " ", re.sub(r"(?s)<[^>]+>", " ", text))[:120].strip()
+    return f"{len(raw):,} bytes, title {title.group(1).strip()[:80]!r}" if title else f"{len(raw):,} bytes: {snippet!r}"
+
+
+def sjj_pages(sport: str, year: int, log=print) -> tuple[str, str]:
+    """
+    St. John's Jesuit's schedule page (HTML, for logos) and plain-text schedule.
+    Raises SourceError, saying what came back, when there's no usable schedule, so a
+    failure shows in the log instead of quietly leaving SJJ's games out.
+    """
+    url = f"{SJJ_SITE}/sports/{SPORTS[sport]['page']}/schedule/{season_label(sport, year)}"
+    hdr = {"Accept": "text/html,*/*", "Accept-Encoding": "gzip"}
+    page, why = "", ""
+    try:
+        raw = http_get(url, hdr)
+        page = raw.decode("utf-8", "ignore")
+        m = re.search(r"schedule_txt\.ashx\?schedule=(\d+)", page)
+        sid = m.group(1) if m else None
+        if not m:
+            why = f"schedule page had no schedule link ({_page_summary(raw)})"
+    except SourceError as e:
+        sid, why = None, f"schedule page: {e}"
+    sid = sid or SJJ_SCHEDULE_IDS.get((sport, year))
+    if why:
+        log(f"chsl: St. John's Jesuit {sport} {year}: {why}" + (f"; trying schedule {sid}" if sid else ""))
+    if not sid:
+        raise SourceError(why or "no schedule id")
+    raw = http_get(f"{SJJ_SITE}/services/schedule_txt.ashx?schedule={sid}", hdr)
+    text = raw.decode("utf-8", "ignore")
+    if "Opponent" not in text or "Result" not in text:
+        raise SourceError(f"plain-text schedule {sid} wasn't a schedule ({_page_summary(raw)})")
+    return page, text
 
 
 def is_chsl(league: dict | None) -> bool:
@@ -311,6 +345,8 @@ def build(sport: str, year: int, found: dict, sjj_rows: list, now: datetime):
     sources = {"mhsaa": "ok"}
     if sjj_rows:
         merge_sjj(games, teams, sjj_rows, now)
+        if sport == "fb":
+            mark_ohsaa_playoffs(games)
         sources["sjj"] = "ok"
 
     # Status
@@ -451,6 +487,27 @@ def merge_sjj(games: dict, teams: dict, rows: list, now: datetime):
                       "league": False, "post": bool(re.search(r"(?i)ohsaa|tournament|district|regional|sectional", row["tournament"] or "")),
                       "note": row["tournament"] or None, "scrimmage": False, "forfeit": False, "ot": (res[3] or None) if res else None,
                       "source": "sjj"}
+
+
+OHIO_REGULAR_SEASON = 10  # OHSAA football: 10 regular-season games, then the playoffs
+
+
+def mark_ohsaa_playoffs(games: dict):
+    """
+    SJJ's site doesn't label its OHSAA playoff games, so in football any game after its
+    10th regular-season game (scrimmages don't count) is a playoff game.
+    """
+    mine = sorted((g for g in games.values() if SJJ in (g["home"]["id"], g["away"]["id"]) and not g["scrimmage"]),
+                  key=lambda g: g["start"] or g["day"])
+    regular = 0
+    for g in mine:
+        if g["post"]:
+            continue
+        if regular >= OHIO_REGULAR_SEASON:
+            g["post"], g["league"] = True, False
+            g["note"] = g["note"] or "OHSAA playoffs"
+        else:
+            regular += 1
 
 
 # ---------------------------------------------------------------- logos
@@ -638,16 +695,22 @@ def update(log, force=False):
                 if not found:
                     log(f"chsl {sport} {year}: no CHSL teams found (season not posted yet?)")
                     continue
-                html = ""
+                html, sjj_error = "", None
                 try:
-                    html, text = sjj_pages(sport, year)
+                    html, text = sjj_pages(sport, year, log)
                     rows = parse_sidearm_text(text, sport, year)
+                    if not rows:
+                        sjj_error = "schedule had no games"
                 except SourceError as e:
-                    rows = []
-                    log(f"chsl: St. John's Jesuit site: {e}")
+                    rows, sjj_error = [], str(e)
                 data = build(sport, year, found, rows, now)
-                if not rows:
+                if sjj_error:
+                    # St. John's games against Ohio teams (and its OHSAA playoff games) are
+                    # only on its own site, so say so loudly: in the log and the run summary
                     data["sources"]["sjj"] = "unavailable"
+                    data["sources"]["sjjError"] = sjj_error
+                    out.setdefault("warnings", []).append(f"{sport} {year}: St. John's Jesuit site: {sjj_error}")
+                    log(f"chsl WARNING {sport} {year}: St. John's Jesuit site unavailable: {sjj_error}")
                 pages[f"{sport}-{year}"] = (html, year)
                 add_logos(data, list(pages.values()), store, log)
                 data["discovery"] = disc
