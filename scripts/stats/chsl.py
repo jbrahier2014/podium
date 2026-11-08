@@ -26,6 +26,7 @@ this step only runs when ENABLED is True (John turned it on Nov 8, 2026).
 """
 from __future__ import annotations
 
+import html as html_lib
 import io
 import json
 import re
@@ -144,7 +145,7 @@ def sjj_pages(sport: str, year: int, log=print) -> tuple[str, str]:
     failure shows in the log instead of quietly leaving SJJ's games out.
     """
     url = f"{SJJ_SITE}/sports/{SPORTS[sport]['page']}/schedule/{season_label(sport, year)}"
-    hdr = {"Accept": "text/html,*/*", "Accept-Encoding": "gzip"}
+    hdr = {"Accept": "text/html,*/*", "Accept-Encoding": "gzip", "Accept-Language": "en-US,en;q=0.9"}
     page, why = "", ""
     try:
         raw = http_get(url, hdr)
@@ -245,26 +246,40 @@ def norm(s: str) -> str:
 
 def parse_sidearm_text(text: str, sport: str, year: int):
     """Rows of a SIDEARM text schedule: [{day, time, at, opponent, location, tournament, result}]."""
-    lines = [ln.rstrip("\r") for ln in text.split("\n")]
-    head_i = next((i for i, ln in enumerate(lines) if ln.startswith("Date") and "Opponent" in ln), None)
+    # Tolerant of what servers do to plain text: a byte-order mark, any line endings,
+    # an HTML wrapper or entities, an indented header
+    text = html_lib.unescape(re.sub(r"(?i)</?(pre|html|body|head)[^>]*>", "\n", (text or "").replace("\ufeff", "")))
+    lines = re.split(r"\r\n|\n\r|\n|\r", text)
+    head_i = next((i for i, ln in enumerate(lines) if all(w in ln.upper() for w in ("DATE", "OPPONENT", "RESULT"))), None)
     if head_i is None:
         return []
     head = lines[head_i]
     cols = ["Date", "Time", "At", "Opponent", "Location", "Tournament", "Result"]
-    pos = [head.find(c) for c in cols]
+    def col(c):  # whole word only ("At" is also inside "Date")
+        m = re.search(rf"\b{c}\b", head, re.I)
+        return m.start() if m else -1
+    pos = [col(c) for c in cols]
     rows = []
     for ln in lines[head_i + 1:]:
         if not ln.strip():
             continue
         cell = lambda k: ln[pos[k]:pos[k + 1] if k + 1 < len(pos) and pos[k + 1] > 0 else None].strip() if pos[k] >= 0 else ""
-        dm = re.match(r"([A-Z][a-z]{2})\s+(\d{1,2})", cell(0))
-        if not dm:
+        # "Aug 20 (Thu)", or numeric "8/20" / "8/20/2026" (some servers format by locale)
+        dm = re.match(r"([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})", cell(0))
+        dn = re.match(r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?", cell(0))
+        if dm:
+            try:
+                mon, day_n = datetime.strptime(dm.group(1).title(), "%b").month, int(dm.group(2))
+            except ValueError:
+                continue
+        elif dn:
+            mon, day_n = int(dn.group(1)), int(dn.group(2))
+        else:
             continue
-        mon = datetime.strptime(dm.group(1), "%b").month
         yr = year if mon >= 7 else year + 1
         res = re.search(r"\b([WLT])\s+(\d+)-(\d+)(?:\s*\(?(\d*OT)\)?)?\s*$", ln)
         rows.append({
-            "day": date(yr, mon, int(dm.group(2))).isoformat(), "time": cell(1), "at": cell(2).lower(),
+            "day": date(yr, mon, day_n).isoformat(), "time": cell(1), "at": cell(2).lower(),
             "opponent": cell(3), "location": cell(4), "tournament": cell(5),
             "result": (res.group(1), int(res.group(2)), int(res.group(3)), res.group(4) or "") if res else None,
         })
@@ -700,7 +715,7 @@ def update(log, force=False):
                     html, text = sjj_pages(sport, year, log)
                     rows = parse_sidearm_text(text, sport, year)
                     if not rows:
-                        sjj_error = "schedule had no games"
+                        sjj_error = f"schedule had no games; it began {text[:300]!r}"
                 except SourceError as e:
                     rows, sjj_error = [], str(e)
                 data = build(sport, year, found, rows, now)
