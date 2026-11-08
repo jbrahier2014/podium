@@ -402,9 +402,6 @@ a.list-item:active, button.list-item:active { background: var(--surface-hover); 
   font: 700 12px/1 var(--font-display); font-variant-numeric: tabular-nums;
   background: var(--surface-sunken); color: var(--ink-muted);
 }
-.rank.r1 { background: var(--gold); color: var(--on-medal); }
-.rank.r2 { background: var(--silver); color: var(--on-medal); }
-.rank.r3 { background: var(--bronze); color: var(--on-medal); }
 
 /* ---------- ScoreCard ---------- */
 .scorecard {
@@ -991,3 +988,23 @@ table.stats th:first-child, table.stats td:first-child { padding-left: var(--spa
 /* Second value inside a Home team-card stat, e.g. the AP rank beside the CFP rank */
 .team-card .tc-stat .v:has(.tc-sub) { white-space: nowrap; }
 .tc-stat .v .tc-sub { margin-left: 5px; white-space: nowrap; font-size: 11px; font-weight: 600; color: var(--ink-muted); letter-spacing: 0; }
+
+/* Scores: jump tiles to Polls and Standings, under the league tabs */
+.jump-tiles { display: flex; gap: var(--space-2); margin: 0 var(--gutter) var(--space-4); }
+.jump-tile {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: var(--space-2);
+  padding: 10px var(--space-3); min-height: 56px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md);
+  color: var(--ink); text-decoration: none;
+}
+.jump-tile:active { background: var(--surface-hover); }
+.jump-tile .jt-icon { flex: none; width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--podium-soft); color: var(--podium); }
+.jump-tile .jt-icon svg { width: 18px; height: 18px; }
+.jump-tile .jt-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.jump-tile .jt-title { font: 600 15px/20px var(--font-sans); }
+.jump-tile .jt-sub { font: 400 12px/16px var(--font-sans); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jump-tile .jt-chev { flex: none; color: var(--ink-muted); }
+.jump-tile .jt-chev svg { width: 14px; height: 14px; }
+
+/* Long error text (URLs) wraps instead of running off the screen */
+.notice { overflow-wrap: anywhere; }

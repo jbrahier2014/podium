@@ -22,6 +22,7 @@ const ROUTES = [
   ['glossary', () => import('./views/glossary.js')],
   ['settings', () => import('./views/settings.js')],
   ['sources', () => import('./views/sources.js')],
+  ['standings', () => import('./views/standings.js')],
   ['standings/:league', () => import('./views/standings.js')],
   ['polls', () => import('./views/polls.js')],
   ['chsl', () => import('./views/chsl.js')],

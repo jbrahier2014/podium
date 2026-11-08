@@ -70,7 +70,9 @@ const show = (v, f) => (f === 'odds' ? pctLabel100(v, 1) : fmt(v, f));
 
 export default {
   async render(ctx) {
-    const league = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague();
+    const league = LEAGUES[ctx.params.league] && ctx.params.league !== 'chsl' ? ctx.params.league : defaultLeague({ withChsl: true });
+    // Last looking at CHSL (or it's first in your order): open the CHSL screen
+    if (league === 'chsl') { navigate('chsl?view=ratings', { replace: true }); return; }
     ctx.setTitle('Ratings');
     const controls = h('div');
     const body = h('div', {}, h('div', { class: 'skeleton', style: { height: '320px', margin: '0 var(--gutter)', borderRadius: 'var(--radius-md)' } }));
@@ -114,7 +116,7 @@ export default {
     if (league === 'cfb') {
       body.append(h('p', { class: 'footnote' }, 'Compare with Jeff Sagarin’s ratings at ',
         h('a', { href: 'https://sagarin.com/sports/cfsend.htm', target: '_blank', rel: 'noopener' }, 'sagarin.com'), ', or with the ',
-        h('a', { href: '#/polls' }, 'AP poll and CFP rankings'), '.'));
+        h('a', { href: '#/polls' }, 'CFP rankings and AP poll'), '.'));
     }
   },
 };

@@ -33,7 +33,7 @@ const DEFAULTS = {
 
 export default {
   async render(ctx) {
-    const league = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague();
+    const league = LEAGUES[ctx.params.league] && ctx.params.league !== 'chsl' ? ctx.params.league : defaultLeague();
     ctx.setTitle('Explore');
     const q = { ...DEFAULTS[league], tool: 'leaders', ...ctx.query };
     const setQuery = (patch) => {

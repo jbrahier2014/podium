@@ -80,9 +80,9 @@ export function badge(text, tone = '') {
   return h('span', { class: `badge ${tone}`.trim() }, text);
 }
 
-/** RankBadge: gold/silver/bronze fills for 1–3, sunken for 4+. */
+/** RankBadge: the rank in a plain sunken square (no gold/silver/bronze for the top 3). */
 export function rankBadge(rank) {
-  return h('span', { class: `rank${rank <= 3 ? ` r${rank}` : ''}`, 'aria-label': `Rank ${rank}` }, rank);
+  return h('span', { class: 'rank', 'aria-label': `Rank ${rank}` }, rank);
 }
 
 // ---------------------------------------------------------------- Button

@@ -1,5 +1,5 @@
 // College football polls: AP Top 25 (plus others receiving votes and teams that dropped
-// out) and, once the committee starts releasing them, the CFP rankings. Any week, any of
+// out) and, once the committee starts releasing them, the CFP rankings (shown first). Any week, any of
 // the last four seasons.   #/polls?poll=ap&season=2026&week=2-9
 
 import { h, clear } from '../util/dom.js';
@@ -14,11 +14,14 @@ export default {
   async render(ctx) {
     ctx.setTitle('Polls');
     const cur = seasonYear('cfb');
-    const q = { poll: ctx.query.poll === 'cfp' ? 'cfp' : 'ap', season: Number(ctx.query.season) || cur, week: ctx.query.week || null };
+    // CFP first; AP when you pick it, or in weeks without committee rankings.
+    // want is your pick, q.poll what's shown (your pick when that week has it)
+    let want = ctx.query.poll === 'ap' ? 'ap' : 'cfp';
+    const q = { poll: want, season: Number(ctx.query.season) || cur, week: ctx.query.week || null };
     const save = () => history.replaceState(null, '', `#/polls?${new URLSearchParams({ poll: q.poll, season: q.season, ...(q.week ? { week: q.week } : {}) })}`);
 
     const seasonBar = h('div'); const pollBar = h('div'); const weekBar = h('div'); const body = h('div');
-    ctx.el.append(...pageTitle('College polls', 'AP Top 25 and College Football Playoff rankings'), seasonBar, pollBar, weekBar, body);
+    ctx.el.append(...pageTitle('College polls', 'College Football Playoff rankings and the AP Top 25'), seasonBar, pollBar, weekBar, body);
 
     let weeks = []; let token = 0;
     const featured = new Set(settings.get().featured.filter((t) => t.league === 'cfb').map((t) => String(t.id)));
@@ -63,14 +66,15 @@ export default {
 
       // Poll choice: CFP is only selectable in weeks the committee released rankings
       const avail = polls.available;
-      if (!avail.includes(q.poll)) q.poll = avail[0] || 'ap';
+      q.poll = avail.includes(want) ? want : avail.includes('ap') ? 'ap' : avail[0] || 'ap';
       save();
       const drawPollBar = () => {
         clear(pollBar);
-        const bar = chips(Object.entries(POLLS).map(([k, p]) => ({ id: k, label: p.label })), q.poll,
-          (k) => { if (!avail.includes(k)) return; q.poll = k; save(); drawPollBar(); draw(polls); }, { label: 'Poll' });
+        const order = ['cfp', 'ap'];
+        const bar = chips(order.map((k) => ({ id: k, label: POLLS[k].label })), q.poll,
+          (k) => { if (!avail.includes(k)) return; want = k; q.poll = k; save(); drawPollBar(); draw(polls); }, { label: 'Poll' });
         bar.querySelectorAll('.chip').forEach((b, n) => {
-          if (!avail.includes(Object.keys(POLLS)[n])) { b.disabled = true; b.title = 'No committee rankings this week'; }
+          if (!avail.includes(order[n])) { b.disabled = true; b.title = 'No committee rankings this week'; }
         });
         pollBar.append(bar);
       };
@@ -92,7 +96,7 @@ export default {
           : e.move === 'same' ? h('span', { class: 'pm same' }, '–')
             : h('span', { class: `pm ${e.move}` }, `${e.move === 'up' ? '▲' : '▼'}${e.moveBy}`);
         return h('a', { class: `poll-row${isAP ? '' : ' no-pts'}${featured.has(e.team.id) ? ' followed' : ''}${!isAP && e.rank === 12 && list.length > 12 ? ' cut' : ''}`, href: `#/team/cfb/${e.team.id}` },
-          h('span', { class: `rank${e.rank <= 3 ? ` r${e.rank}` : ''}` }, e.rank),
+          h('span', { class: 'rank' }, e.rank),
           crest(e.team, 'sm'),
           h('span', { class: 'pr-team' }, h('span', { class: 'nm' }, e.team.short || e.team.name), e.record ? h('span', { class: 'rec' }, e.record) : null),
           isAP ? h('span', { class: 'pr-pts' }, e.points.toLocaleString(), e.firstPlace ? h('span', { class: 'fpv' }, ` (${e.firstPlace})`) : null) : null,

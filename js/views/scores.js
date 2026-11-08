@@ -7,7 +7,7 @@
 //   #/scores/cfb?w=2-8&f=top25  or f=<conference name>
 //   #/scores/mlb?d=2026-10-24
 
-import { h, clear, openSheet } from '../util/dom.js';
+import { h, clear, openSheet, icon, ICONS } from '../util/dom.js';
 import { LEAGUES } from '../leagues.js';
 import { settings } from '../store/settings.js';
 import { getScoreboard, getTeams, sortGames, needsLiveUpdates, nearbyMlbDates } from '../data/index.js';
@@ -27,18 +27,27 @@ function urlFor(league, q) {
 
 export default {
   async render(ctx) {
-    const league = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague();
+    const league = LEAGUES[ctx.params.league] && ctx.params.league !== 'chsl' ? ctx.params.league : defaultLeague({ withChsl: true });
+    // Last looking at CHSL (or it's first in your order): open the CHSL screen
+    if (league === 'chsl') { navigate('chsl?view=scores', { replace: true }); return; }
     const q = ctx.query;
     ctx.setTitle('Scores');
-    const lg = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague();
-    const navLink = (href, text) => h('a', { href, class: 't-label', style: { color: 'var(--link)' } }, text);
-    ctx.setActions(...(lg === 'cfb' ? [navLink('#/polls', 'Polls'), h('span', { style: { width: 'var(--space-4)', display: 'inline-block' } })] : []), navLink(`#/standings/${lg}`, 'Standings'));
+    const lg = league;
+    // Polls and Standings as tiles under the league tabs (they used to float in the top bar)
+    const tile = (href, iconName, title, sub) => h('a', { href, class: 'jump-tile' },
+      h('span', { class: 'jt-icon' }, icon(ICONS[iconName])),
+      h('span', { class: 'jt-text' }, h('span', { class: 'jt-title' }, title), h('span', { class: 'jt-sub' }, sub)),
+      h('span', { class: 'jt-chev' }, icon(ICONS.chevron)));
+    const jumps = h('div', { class: 'jump-tiles' },
+      ...(lg === 'cfb' ? [tile('#/polls', 'signal', 'Polls', 'CFP · AP')] : []),
+      tile(`#/standings/${lg}`, 'standings', 'Standings', lg === 'cfb' ? 'By conference' : lg === 'nfl' ? 'Divisions · playoff seeds' : 'Divisions · wild card'));
 
     const controls = h('div');
     const body = h('div', {}, skeletonList());
     ctx.el.append(
       ...pageTitle('Scores'),
       leagueTabs(league, (id) => navigate(`scores/${id}`, { replace: true }), { chsl: 'scores' }),
+      jumps,
       controls,
       body,
     );

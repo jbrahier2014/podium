@@ -1,7 +1,7 @@
 // Settings: featured teams, live refresh interval, theme, clear cache.
 
 import { h, icon, ICONS, openSheet, toast, clear } from '../util/dom.js';
-import { settings } from '../store/settings.js';
+import { settings, leagueOrder } from '../store/settings.js';
 import { cache } from '../store/cache.js';
 import { getTeams } from '../data/index.js';
 import { LEAGUES, LEAGUE_IDS } from '../leagues.js';
@@ -39,6 +39,14 @@ function build() {
       h('span', { class: 'grow' }, 'Add team')),
   );
 
+  // ---- League order ----
+  const order = leagueOrder();
+  const orderList = h('div', { class: 'list' }, order.map((id, i) =>
+    h('div', { class: 'list-item' },
+      h('span', { class: 'grow' }, h('div', { class: 'title' }, LEAGUES[id].name), h('div', { class: 'sub' }, LEAGUES[id].longName)),
+      h('button', { class: 'icon-btn', 'aria-label': `Move ${LEAGUES[id].name} up`, disabled: i === 0, onclick: () => settings.moveLeague(i, -1) }, icon(ICONS.up)),
+    )));
+
   // ---- Cache ----
   const cacheDetail = h('span', { class: 'detail' }, '…');
   cache.count().then((n) => { cacheDetail.textContent = `${n} item${n === 1 ? '' : 's'}`; });
@@ -47,6 +55,10 @@ function build() {
     h('div', { class: 'group-label' }, 'Featured teams'),
     featuredList,
     h('p', { class: 'footnote' }, 'Pinned on Home with the deepest default views. Every team stays browsable.'),
+
+    h('div', { class: 'group-label' }, 'League order'),
+    orderList,
+    h('p', { class: 'footnote' }, 'The order of the league tabs. The first league in season is where the app starts; after that, Scores, Ratings, Standings and Explore stay on whichever league you last picked, even after you close the app.'),
 
     h('div', { class: 'group-label' }, 'Live score refresh'),
     choice(REFRESH_CHOICES.map((sec) => ({ id: sec, label: sec < 60 ? `${sec}s` : `${sec / 60} min` })), s.refreshSeconds,

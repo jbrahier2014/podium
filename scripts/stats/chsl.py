@@ -22,7 +22,7 @@ Computed here
   predicted margins / win chances for upcoming games between CHSL teams.
 
 Permission: MHSAA's and SIDEARM's terms limit their content to personal viewing, so
-this step only runs once ENABLED is True (set after both have said yes).
+this step only runs when ENABLED is True (John turned it on Nov 8, 2026).
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ import numpy as np
 from common import DATA, UA, SourceError, get_json, http_get, least_squares_ratings, norm_cdf, now_iso, r, ranks, read_json, write_json
 
 # Switched on once MHSAA and St. John's Jesuit have given permission (see the module notes)
-ENABLED = False
+ENABLED = True  # John confirmed, Nov 8 2026
 
 API = "https://my.mhsaa.com/DesktopModules/MHSAA-Endpoint/"
 EASTERN = ZoneInfo("America/Detroit")

@@ -1,7 +1,8 @@
 // Building blocks shared by several screens.
 
 import { h } from '../util/dom.js';
-import { LEAGUES, leaguesBySeason } from '../leagues.js';
+import { LEAGUES, inSeason } from '../leagues.js';
+import { leagueOrder } from '../store/settings.js';
 import { tabs } from '../ui/components.js';
 import { navigate } from '../router.js';
 
@@ -14,16 +15,40 @@ export function pageTitle(text, subtitle) {
   return out;
 }
 
-/**
- * NFL / CFB / MLB tabs, in-season leagues first. onPick(leagueId) on change.
- * chsl: add a CHSL tab that opens the CHSL screen at that section ('scores',
- * 'standings' or 'ratings'); false leaves it out.
- */
-export function leagueTabs(current, onPick, { chsl = false } = {}) {
-  const items = leaguesBySeason().map((id) => ({ id, label: LEAGUES[id].name }));
-  if (chsl || current === 'chsl') items.push({ id: 'chsl', label: 'CHSL' });
-  return tabs(items, current, (id) => (id === 'chsl' && current !== 'chsl' ? navigate(`chsl?view=${chsl || 'scores'}`) : onPick(id)), { label: 'League' });
+// The league you're looking at carries over between Scores, Ratings, Standings and
+// Explore, and across app launches (iPhone closes home-screen apps in the background
+// often, which used to reset it to the first league), so picking CFB keeps CFB.
+const LAST_KEY = 'podium.lastLeague';
+let lastLeague = null;
+try { lastLeague = localStorage.getItem(LAST_KEY); } catch { /* blocked */ }
+export function rememberLeague(id) {
+  lastLeague = id;
+  try { localStorage.setItem(LAST_KEY, id); } catch { /* blocked */ }
 }
 
-/** The league to show by default: the first in-season one. */
-export const defaultLeague = () => leaguesBySeason()[0];
+/**
+ * League tabs in your order (Settings › League order). onPick(leagueId) on change.
+ * chsl: include the CHSL tab, which opens the CHSL screen at that section ('scores',
+ * 'standings' or 'ratings'); false leaves it out (Explore).
+ */
+export function leagueTabs(current, onPick, { chsl = false } = {}) {
+  rememberLeague(current);
+  const items = leagueOrder()
+    .filter((id) => id !== 'chsl' || chsl || current === 'chsl')
+    .map((id) => ({ id, label: LEAGUES[id].name }));
+  return tabs(items, current, (id) => {
+    rememberLeague(id);
+    if (id === 'chsl' && current !== 'chsl') navigate(`chsl?view=${chsl || 'scores'}`); else onPick(id);
+  }, { label: 'League' });
+}
+
+/**
+ * The league a screen opens on: the one you were last looking at, else the first
+ * in-season league in your order. withChsl: whether this screen has a CHSL tab.
+ */
+export function defaultLeague({ withChsl = false } = {}) {
+  const ok = (id) => id && LEAGUES[id] && (id !== 'chsl' || withChsl);
+  if (ok(lastLeague)) return lastLeague;
+  const order = leagueOrder().filter(ok);
+  return order.find((id) => inSeason(id)) || order[0];
+}

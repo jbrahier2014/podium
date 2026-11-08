@@ -7,12 +7,14 @@ import { LEAGUES } from '../leagues.js';
 import { settings } from '../store/settings.js';
 import { getStandings } from '../data/index.js';
 import { chips, standingsTable } from '../ui/components.js';
-import { pageTitle, leagueTabs } from './common.js';
+import { pageTitle, leagueTabs, defaultLeague } from './common.js';
 import { navigate } from '../router.js';
 
 export default {
   async render(ctx) {
-    const league = LEAGUES[ctx.params.league] ? ctx.params.league : 'nfl';
+    const league = LEAGUES[ctx.params.league] && ctx.params.league !== 'chsl' ? ctx.params.league : defaultLeague({ withChsl: true });
+    // Last looking at CHSL (or it's first in your order): open the CHSL screen
+    if (league === 'chsl') { navigate('chsl?view=standings', { replace: true }); return; }
     ctx.setTitle('Standings');
     const controls = h('div');
     const body = h('div', {}, h('div', { class: 'skeleton', style: { height: '300px', margin: '0 var(--gutter)', borderRadius: 'var(--radius-md)' } }));

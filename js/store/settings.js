@@ -23,7 +23,10 @@ const DEFAULTS = {
   refreshSeconds: 30,  // live-score polling interval while games are in progress
   logos: true,        // real team logos (false = Podium color crests)
   theme: 'dark',       // 'dark' (Arena, the default) | 'light' (Daylight) | 'system'
+  leagueOrder: ['cfb', 'nfl', 'chsl', 'mlb'], // league tabs, left to right; the first in season opens by default
 };
+
+export const DEFAULT_LEAGUE_ORDER = DEFAULTS.leagueOrder;
 
 let state = load();
 const listeners = new Set();
@@ -36,6 +39,13 @@ function load() {
     if (saved.featured && !saved.chslSeeded) {
       out.featured = [...saved.featured, ...CHSL_FEATURED.filter((c) => !saved.featured.some((t) => t.league === 'chsl' && t.id === c.id))];
       out.chslSeeded = true;
+      try { localStorage.setItem(KEY, JSON.stringify(out)); } catch { /* private mode */ }
+    }
+    // One-time: league order saved under the old default (NFL first) moves to the new
+    // one, CFB, NFL, CHSL, MLB. Changes made in Settings after this are kept.
+    if (saved.leagueOrder && !saved.orderV2) {
+      out.leagueOrder = [...DEFAULTS.leagueOrder];
+      out.orderV2 = true;
       try { localStorage.setItem(KEY, JSON.stringify(out)); } catch { /* private mode */ }
     }
     return out;
@@ -70,6 +80,13 @@ export const settings = {
     [list[index], list[j]] = [list[j], list[index]];
     settings.set({ featured: list });
   },
+  moveLeague(index, delta) {
+    const list = leagueOrder();
+    const j = index + delta;
+    if (j < 0 || j >= list.length) return;
+    [list[index], list[j]] = [list[j], list[index]];
+    settings.set({ leagueOrder: list });
+  },
   resetFeatured() { settings.set({ featured: [...DEFAULT_FEATURED, ...CHSL_FEATURED] }); },
 };
 
@@ -83,4 +100,10 @@ export function applyTheme(theme = state.theme) {
   const t = resolvedTheme(theme);
   document.documentElement.setAttribute('data-theme', t);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t === 'light' ? '#F5F5F2' : '#111214');
+}
+
+/** The saved league order, repaired if a league was added or removed since it was saved. */
+export function leagueOrder() {
+  const saved = Array.isArray(state.leagueOrder) ? state.leagueOrder.filter((id) => DEFAULT_LEAGUE_ORDER.includes(id)) : [];
+  return [...new Set([...saved, ...DEFAULT_LEAGUE_ORDER])];
 }
