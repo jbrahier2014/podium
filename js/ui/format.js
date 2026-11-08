@@ -37,7 +37,11 @@ export function footText(g) {
   }
   if (g.status.state === 'in' && s) {
     const poss = s.possession ? [g.home, g.away].find((x) => x.team.id === s.possession)?.team.abbr : null;
-    const parts = [poss ? `${poss} ball` : null, s.downDistance, s.redZone ? 'Red zone' : null].filter(Boolean);
+    // ESPN marks the kicking team as having the ball during a kickoff, so after a score
+    // say "Kickoff" rather than "UTAH ball"; otherwise fill a missing down with the spot
+    if (!s.downDistance && s.kickoff) return poss ? `${poss} kicking off` : 'Kickoff';
+    const where = s.downDistance || (s.spot ? `at ${s.spot}` : null);
+    const parts = [poss ? `${poss} ball` : null, where, s.redZone ? 'Red zone' : null].filter(Boolean);
     return parts.join(' · ') || null;
   }
   if (g.status.state === 'pre' && g.neutral && g.venue) return g.venue;

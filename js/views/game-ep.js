@@ -4,6 +4,7 @@
 
 import { pctLabel } from '../util/prob.js';
 import { h, clear } from '../util/dom.js';
+import { checkedYtg } from '../data/providers/espn.js';
 import { epValue, fourthDown, annotate, summarize, halfSeconds, scoreable } from '../data/ep.js';
 import { crest, badge, statBar, edgeBar, emptyState } from '../ui/components.js';
 
@@ -43,7 +44,13 @@ function liveState(d) {
     if (/timeout|official|injury|end (of )?(period|quarter)|end period/i.test(p.type)) continue;
     const e = p.end;
     if (e && e.down >= 1 && e.down <= 4 && e.ytg >= 1 && e.ytg <= 99 && e.team) {
-      return { offense: e.team, down: e.down, dist: e.distance || 10, ytg: e.ytg, period: p.period, clockSecs: Math.max(0, p.clockSecs - 5), text: e.text };
+      // Match the header: when the scoreboard's situation line ("1st & 10 at BYU 22") is
+      // about the same team, its side of the field decides
+      const sit = g.situation;
+      const ytg = sit?.downDistance && sit.possession === e.team
+        ? checkedYtg(e.ytg, e.team, sit.downDistance, new Map([[g.home.team.abbr, g.home.team.id], [g.away.team.abbr, g.away.team.id]]))
+        : e.ytg;
+      return { offense: e.team, down: e.down, dist: e.distance || 10, ytg, period: p.period, clockSecs: Math.max(0, p.clockSecs - 5), text: e.text };
     }
     // Between a score and the kickoff: show the receiving team's next drive from a
     // typical start (NFL kickoffs now usually end near the 30; college touchbacks at the 25)

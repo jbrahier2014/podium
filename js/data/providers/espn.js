@@ -149,6 +149,10 @@ export function normalizeEvent(league, ev, idx) {
     situation: status.state === 'in' && sit ? {
       possession: sit.possession ? String(sit.possession) : null,
       downDistance: sit.downDistanceText || null,
+      // Between plays with no down (kickoffs, PATs, just after a turnover) ESPN leaves out
+      // down & distance: keep where the ball is, and whether a kickoff is next
+      spot: sit.possessionText || null,
+      kickoff: /touchdown|extra point|two-point|field goal good|safety|kickoff/i.test(sit.lastPlay?.type?.text || ''),
       redZone: !!sit.isRedZone,
       lastPlay: sit.lastPlay?.text || null,
     } : null,
@@ -324,7 +328,7 @@ export async function getGame(league, gameId, { force = false } = {}) {
     clock: p.clock?.displayValue || '',
     teamId: abbrToId.get(p.team?.abbreviation) || String(p.team?.id || ''),
     type: p.type?.abbreviation || '',
-    text: p.text,
+    text: dropFirstDownTag(p.text),
     away: p.awayScore, home: p.homeScore,
   }));
 
@@ -344,7 +348,7 @@ export async function getGame(league, gameId, { force = false } = {}) {
       items: (d.plays || []).slice().reverse().map((p) => ({
         id: String(p.id),
         meta: `${periodLabel(p.period?.number || 1)} ${p.clock?.displayValue || ''}${p.start?.downDistanceText ? ` · ${p.start.downDistanceText}` : ''}`,
-        text: p.text,
+        text: p.scoringPlay ? dropFirstDownTag(p.text) : p.text,
         scoring: !!p.scoringPlay,
       })),
     };
@@ -352,7 +356,12 @@ export async function getGame(league, gameId, { force = false } = {}) {
 
   // Chronological plays with field position, for expected points (js/data/ep.js)
   const toSecs = (c) => { const m = String(c?.displayValue || '').match(/(\d+):(\d+)/); return m ? Number(m[1]) * 60 + Number(m[2]) : Number(c?.value) || 0; };
-  const spot = (x) => (x ? { down: x.down, distance: x.distance, ytg: x.yardsToEndzone, team: x.team?.id != null ? String(x.team.id) : null, text: x.downDistanceText || '' } : null);
+  const spot = (x) => {
+    if (!x) return null;
+    const team = x.team?.id != null ? String(x.team.id) : null;
+    const text = x.downDistanceText || '';
+    return { down: x.down, distance: x.distance, ytg: checkedYtg(x.yardsToEndzone, team, text || x.possessionText, abbrToId), team, text };
+  };
   const pbp = [];
   uniqueDrives.forEach((d) => (d.plays || []).forEach((p) => pbp.push({
     id: String(p.id), seq: Number(p.sequenceNumber) || 0,
@@ -591,4 +600,31 @@ export async function getTeamStats(league, teamId, season) {
     }).filter((r) => r.raw != null),
   })).filter((g) => g.rows.length);
   return { groups, games };
+}
+
+/**
+ * Yards to the end zone for the team with the ball, checked against ESPN's own spot
+ * text ("1st & 10 at BYU 22", or possessionText "BYU 22"). ESPN's yardsToEndzone is
+ * sometimes measured toward the wrong goal (seen around quarter breaks, when teams
+ * switch ends), which put Utah at its "own 22" while the text said BYU 22. The text
+ * names the side of the field, so when the two disagree the text wins.
+ */
+export function checkedYtg(ytg, teamId, text, abbrToId) {
+  const m = String(text || '').match(/(?:^|\bat\s+)([A-Za-z&.'-]+)\s+(\d{1,2})\s*$/);
+  const n = m && Number(m[2]);
+  if (!n || n < 1 || n > 50) return ytg;
+  if (n === 50) return 50;
+  const side = [...abbrToId].find(([abbr]) => String(abbr || '').toUpperCase() === m[1].toUpperCase())?.[1];
+  if (!side || !teamId) return ytg;
+  const fromText = side === teamId ? 100 - n : n;
+  return ytg == null || Math.abs(fromText - ytg) > 1 ? fromText : ytg;
+}
+
+/**
+ * The stat crew tags any play that reaches the line to gain with "1ST DOWN", touchdowns
+ * included (they count as first downs in the stats). On a scoring play the tag only
+ * reads oddly, so it's dropped from the text; the first-down counts are unchanged.
+ */
+export function dropFirstDownTag(text) {
+  return String(text || '').replace(/,?\s*\b1ST DOWN(?:\s+[A-Z]{2,})?\b\.?(?=\s*(?:[,.)]|$))/gi, '').replace(/\s+$/, '');
 }
