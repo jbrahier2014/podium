@@ -594,7 +594,10 @@ def content_box(raw: bytes):
     """[left, top, right, bottom, aspect]: the logo's visible part as fractions of the
     image (white and transparent pixels don't count), plus width / height."""
     from PIL import Image  # only the logo step needs Pillow
-    im = Image.open(io.BytesIO(raw)).convert("RGBA")
+    return content_box_im(Image.open(io.BytesIO(raw)).convert("RGBA"))
+
+
+def content_box_im(im):
     a = np.asarray(im).astype(np.int16)
     mask = (a[..., 3] > 24) & ~((a[..., 0] > 232) & (a[..., 1] > 232) & (a[..., 2] > 232))
     ys, xs = np.nonzero(mask)
@@ -606,6 +609,33 @@ def content_box(raw: bytes):
 
 def side_key(s: dict) -> str | None:
     return s.get("id") or s.get("key") or (f"n:{norm(s['name'])}" if s.get("name") else None)
+
+
+LOGO_DIR = DATA / "chsl" / "logos"
+LOGO_PX = 160  # longest side of the saved copy (tiles are at most ~80 px, so 2x)
+
+
+def local_logo(url: str, raw: bytes) -> str:
+    """Save a trimmed PNG copy of a logo; returns its site path (data/chsl/logos/<hash>.png)."""
+    import hashlib
+    from PIL import Image
+    im = Image.open(io.BytesIO(raw))
+    im.load()
+    im = im.convert("RGBA")
+    box = content_box_im(im)
+    if box:
+        w, h = im.size
+        im = im.crop((round(box[0] * w), round(box[1] * h), round(box[2] * w), round(box[3] * h)))
+    im.thumbnail((LOGO_PX, LOGO_PX), Image.LANCZOS)
+    LOGO_DIR.mkdir(parents=True, exist_ok=True)
+    name = hashlib.sha1(url.encode()).hexdigest()[:12] + ".png"
+    im.save(LOGO_DIR / name, "PNG", optimize=True)
+    rel = f"data/chsl/logos/{name}"
+    _LOGO_SIZES[rel] = round(im.width / im.height, 4)
+    return rel
+
+
+_LOGO_SIZES: dict = {}
 
 
 def add_logos(data: dict, pages: list, store: dict, log) -> None:
@@ -646,27 +676,42 @@ def add_logos(data: dict, pages: list, store: dict, log) -> None:
             store["checkedAt"] = now_iso()
         except Exception as e:  # logos are a nicety; never fail the run over them
             log(f"chsl logos: {e}")
-    # 3. Content boxes for trimming (once per logo URL)
-    boxes = store.setdefault("boxes", {})
+    # 3. A local copy of each logo: downloaded once, trimmed to the logo itself, saved as
+    # PNG in data/chsl/logos and served from this site. Loading them from the schools'
+    # sites left blank tiles on iPhone for some (they come as WebP from a third-party
+    # site); a same-site PNG works everywhere, loads faster and works offline.
+    files = store.setdefault("files", {})
     for k in want:
         url = logos.get(k)
-        if url and url not in boxes:
-            try:
-                boxes[url] = content_box(http_get(url, timeout=30))
-            except Exception as e:
-                boxes[url] = None
-                log(f"chsl logos: no box for {k}: {e}")
+        if not url:
+            continue
+        have = files.get(url)
+        if have and (DATA.parent / have).exists():
+            continue
+        try:
+            files[url] = local_logo(url, http_get(url, timeout=30))
+        except Exception as e:  # keep the remote logo; never fail the run over logos
+            files[url] = None
+            log(f"chsl logos: couldn't copy {k}'s logo: {e}")
+    sizes = store.setdefault("sizes", {})
+    sizes.update(_LOGO_SIZES)
+
+    def shown(url):
+        """The logo to show: the local copy when there is one."""
+        return files.get(url) or url
+
     for t in data["teams"]:
-        t["logo"] = logos.get(t["id"]) or None
+        t["logo"] = shown(logos[t["id"]]) if logos.get(t["id"]) else None
     used = set()
     for g in data["games"]:
         for s in (g["home"], g["away"]):
             k = side_key(s)
             if k and logos.get(k):
-                s["logo"] = logos[k]
-                used.add(logos[k])
+                s["logo"] = shown(logos[k])
+                used.add(s["logo"])
     used |= {t["logo"] for t in data["teams"] if t["logo"]}
-    data["logoBoxes"] = {u: boxes[u] for u in used if boxes.get(u)}
+    # Local copies are already trimmed: the box is the whole image
+    data["logoBoxes"] = {u: [0, 0, 1, 1, sizes[u]] for u in used if u in sizes}
     log(f"chsl logos: {sum(1 for k in want if logos.get(k))} of {len(want)} schools")
 
 
