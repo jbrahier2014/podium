@@ -12,13 +12,17 @@ import { navigate } from '../router.js';
 
 export default {
   async render(ctx) {
-    const league = LEAGUES[ctx.params.league] && ctx.params.league !== 'chsl' ? ctx.params.league : defaultLeague({ withChsl: true });
-    // Last looking at CHSL (or it's first in your order): open the CHSL screen
-    if (league === 'chsl') { navigate('chsl?view=standings', { replace: true }); return; }
+    const league = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague({ withChsl: true });
     ctx.setTitle('Standings');
+    // CHSL: its standings right here, like the other leagues
+    if (league === 'chsl') {
+      ctx.el.append(...pageTitle('Standings'), leagueTabs('chsl', (id) => navigate(`standings/${id}`, { replace: true }), { chsl: true }));
+      const { chslSection } = await import('./chsl.js');
+      return chslSection(ctx, 'standings');
+    }
     const controls = h('div');
     const body = h('div', {}, h('div', { class: 'skeleton', style: { height: '300px', margin: '0 var(--gutter)', borderRadius: 'var(--radius-md)' } }));
-    ctx.el.append(...pageTitle('Standings'), leagueTabs(league, (id) => navigate(`standings/${id}`, { replace: true }), { chsl: 'standings' }), controls, body);
+    ctx.el.append(...pageTitle('Standings'), leagueTabs(league, (id) => navigate(`standings/${id}`, { replace: true }), { chsl: true }), controls, body);
 
     let st;
     try { st = await getStandings(league); } catch (err) {

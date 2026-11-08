@@ -28,8 +28,8 @@ export function rememberLeague(id) {
 
 /**
  * League tabs in your order (Settings › League order). onPick(leagueId) on change.
- * chsl: include the CHSL tab, which opens the CHSL screen at that section ('scores',
- * 'standings' or 'ratings'); false leaves it out (Explore).
+ * chsl: include the CHSL tab (Scores, Standings and Ratings show CHSL in place);
+ * false leaves it out (Explore).
  */
 export function leagueTabs(current, onPick, { chsl = false } = {}) {
   rememberLeague(current);
@@ -38,7 +38,7 @@ export function leagueTabs(current, onPick, { chsl = false } = {}) {
     .map((id) => ({ id, label: LEAGUES[id].name }));
   return tabs(items, current, (id) => {
     rememberLeague(id);
-    if (id === 'chsl' && current !== 'chsl') navigate(`chsl?view=${chsl || 'scores'}`); else onPick(id);
+    onPick(id);
   }, { label: 'League' });
 }
 

@@ -612,6 +612,7 @@ def side_key(s: dict) -> str | None:
 
 
 LOGO_DIR = DATA / "chsl" / "logos"
+MANUAL_LOGO_DIR = DATA.parent / "assets" / "chsl-logos"  # hand-picked, committed with the app
 LOGO_PX = 160  # longest side of the saved copy (tiles are at most ~80 px, so 2x)
 
 
@@ -696,23 +697,38 @@ def add_logos(data: dict, pages: list, store: dict, log) -> None:
     sizes = store.setdefault("sizes", {})
     sizes.update(_LOGO_SIZES)
 
-    def shown(url):
-        """The logo to show: the local copy when there is one."""
-        return files.get(url) or url
+    # Hand-picked logos (assets/chsl-logos/<school>.png) beat anything found online
+    manual = {}
+    for path in sorted(MANUAL_LOGO_DIR.glob("*.png")):
+        try:
+            from PIL import Image
+            with Image.open(path) as im:
+                rel = f"assets/chsl-logos/{path.name}"
+                manual[path.stem] = rel
+                sizes[rel] = round(im.width / im.height, 4)
+        except Exception as e:
+            log(f"chsl logos: couldn't read {path.name}: {e}")
+
+    def shown(k):
+        """The logo to show for a school: hand-picked, else the local copy, else the original."""
+        if k in manual:
+            return manual[k]
+        url = logos.get(k)
+        return (files.get(url) or url) if url else None
 
     for t in data["teams"]:
-        t["logo"] = shown(logos[t["id"]]) if logos.get(t["id"]) else None
+        t["logo"] = shown(t["id"])
     used = set()
     for g in data["games"]:
         for s in (g["home"], g["away"]):
             k = side_key(s)
-            if k and logos.get(k):
-                s["logo"] = shown(logos[k])
+            if k and shown(k):
+                s["logo"] = shown(k)
                 used.add(s["logo"])
     used |= {t["logo"] for t in data["teams"] if t["logo"]}
     # Local copies are already trimmed: the box is the whole image
     data["logoBoxes"] = {u: [0, 0, 1, 1, sizes[u]] for u in used if u in sizes}
-    log(f"chsl logos: {sum(1 for k in want if logos.get(k))} of {len(want)} schools")
+    log(f"chsl logos: {sum(1 for k in want if shown(k))} of {len(want)} schools ({len(manual)} hand-picked)")
 
 
 # ---------------------------------------------------------------- job

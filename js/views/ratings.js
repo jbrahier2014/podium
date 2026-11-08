@@ -70,13 +70,17 @@ const show = (v, f) => (f === 'odds' ? pctLabel100(v, 1) : fmt(v, f));
 
 export default {
   async render(ctx) {
-    const league = LEAGUES[ctx.params.league] && ctx.params.league !== 'chsl' ? ctx.params.league : defaultLeague({ withChsl: true });
-    // Last looking at CHSL (or it's first in your order): open the CHSL screen
-    if (league === 'chsl') { navigate('chsl?view=ratings', { replace: true }); return; }
+    const league = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague({ withChsl: true });
     ctx.setTitle('Ratings');
+    // CHSL: its ratings right here, like the other leagues
+    if (league === 'chsl') {
+      ctx.el.append(...pageTitle('Ratings'), leagueTabs('chsl', (id) => navigate(`ratings/${id}`, { replace: true }), { chsl: true }));
+      const { chslSection } = await import('./chsl.js');
+      return chslSection(ctx, 'ratings');
+    }
     const controls = h('div');
     const body = h('div', {}, h('div', { class: 'skeleton', style: { height: '320px', margin: '0 var(--gutter)', borderRadius: 'var(--radius-md)' } }));
-    ctx.el.append(...pageTitle('Ratings'), leagueTabs(league, (id) => navigate(`ratings/${id}`, { replace: true }), { chsl: 'ratings' }), controls, body);
+    ctx.el.append(...pageTitle('Ratings'), leagueTabs(league, (id) => navigate(`ratings/${id}`, { replace: true }), { chsl: true }), controls, body);
 
     let seasons; let data; let teamInfo;
     try {

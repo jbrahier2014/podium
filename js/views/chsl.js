@@ -1,28 +1,23 @@
-// Catholic High School League screen: scores, standings and power ratings for
-// football and boys basketball, plus team pages (schedule, records, Home/Away).
+// Catholic High School League: scores, standings and power ratings for football and
+// boys basketball (shown inside the Scores, Standings and Ratings screens, see
+// chslSection), plus team pages (schedule, records, Home/Away).
 //
 // Routes
-//   #/chsl[?view=scores|standings|ratings]        current sport
-//   #/chsl/<fb|bb>[?view=...&year=2026&week=...]
 //   #/chsl/team/<id>            team page, current sport
 //   #/chsl/<fb|bb>/team/<id>    team page for one sport
+//   #/chsl[/<fb|bb>]?view=...   old links: forward to Scores / Standings / Ratings
 
 import { h, clear, icon, ICONS, toast } from '../util/dom.js';
 import { settings } from '../store/settings.js';
 import { chslSeasons, loadChsl, currentSport, SPORT_NAME, weekOf, defaultWeek } from '../data/chsl.js';
-import { crest, tabs, chips, choice, emptyState, standingsTable, periodPicker } from '../ui/components.js';
+import { crest, chips, choice, emptyState, standingsTable, periodPicker } from '../ui/components.js';
 import { gameCard } from '../ui/format.js';
 import { scheduleRow } from './team.js';
-import { pageTitle, leagueTabs } from './common.js';
+import { pageTitle } from './common.js';
 import { navigate } from '../router.js';
 import { etDay, etLongDay } from '../util/time.js';
 import { pctLabel } from '../util/prob.js';
 
-const VIEWS = [
-  { id: 'scores', label: 'Scores' },
-  { id: 'standings', label: 'Standings' },
-  { id: 'ratings', label: 'Ratings' },
-];
 const featuredIds = () => new Set(settings.get().featured.filter((t) => t.league === 'chsl').map((t) => String(t.id)));
 
 export default {
@@ -37,22 +32,40 @@ export default {
     }
     const sport = SPORT_NAME[ctx.params.sport] ? ctx.params.sport : currentSport(seasons);
     if (ctx.params.id) return renderTeam(ctx, sport, seasons);
-    return renderLeague(ctx, sport, seasons);
+    return forwardLeague(ctx, sport);
   },
 };
 
-// ---------------------------------------------------------------- league screen
-async function renderLeague(ctx, sport, seasons) {
-  ctx.setTitle('CHSL');
-  const q = { view: 'scores', ...ctx.query };
+// ---------------------------------------------------------------- league sections
+// CHSL lives inside the regular screens, like the other leagues: Scores (with a
+// Standings tile), Standings, and Ratings, each with the CHSL league tab selected.
+//   #/scores/chsl[?sport=fb|bb&year=2026&week=...]
+//   #/standings/chsl[?sport=&year=]
+//   #/ratings/chsl[?sport=&year=]
+// The old #/chsl?view=... links forward to these.
+
+/**
+ * Append the CHSL part of a screen (sport and season pickers, then the section) to
+ * ctx.el, under the page title and league tabs the screen already drew.
+ * section: 'scores' | 'standings' | 'ratings'
+ */
+export async function chslSection(ctx, section) {
+  const seasons = await chslSeasons();
+  if (!ctx.isCurrent()) return;
+  if (!seasons.length) {
+    ctx.el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No CHSL data yet', text: 'Scores and standings appear after the first nightly update with high school data.' })));
+    return;
+  }
+  const q = { ...ctx.query };
+  const sport = SPORT_NAME[q.sport] ? q.sport : currentSport(seasons);
   const years = seasons.filter((s) => s.sport === sport).map((s) => s.year);
   const year = years.includes(Number(q.year)) ? Number(q.year) : years[0];
-  const go = (patch, replace = true) => {
-    const next = { ...q, ...patch };
-    const s = next.sport || sport; delete next.sport;
+  const hrefFor = (sec, patch = {}) => {
+    const next = { sport, year: year === years[0] ? '' : year, week: q.week, ...patch };
     const qs = new URLSearchParams(Object.entries(next).filter(([, v]) => v != null && v !== '')).toString();
-    navigate(`chsl/${s}${qs ? `?${qs}` : ''}`, { replace });
+    return `${sec}/chsl${qs ? `?${qs}` : ''}`;
   };
+  const go = (patch) => navigate(hrefFor(section, patch), { replace: true });
 
   const sportBar = h('div', { class: 'chsl-bar' },
     choice([{ id: 'fb', label: 'Football' }, { id: 'bb', label: 'Basketball' }].filter((s) => seasons.some((x) => x.sport === s.id)), sport,
@@ -60,14 +73,15 @@ async function renderLeague(ctx, sport, seasons) {
   const yearBar = years.length > 1
     ? chips(years.map((y) => ({ id: y, label: label(sport, y) })), year, (y) => go({ year: y, week: '' }), { label: 'Season' })
     : null;
+  // Scores: a Standings tile, like the other leagues
+  const jumps = section === 'scores'
+    ? h('div', { class: 'jump-tiles' }, h('a', { href: `#/${hrefFor('standings', { week: '' })}`, class: 'jump-tile' },
+      h('span', { class: 'jt-icon' }, icon(ICONS.standings)),
+      h('span', { class: 'jt-text' }, h('span', { class: 'jt-title' }, 'Standings'), h('span', { class: 'jt-sub' }, 'By division')),
+      h('span', { class: 'jt-chev' }, icon(ICONS.chevron))))
+    : null;
   const body = h('div', {}, h('div', { class: 'skeleton', style: { height: '240px', margin: '0 var(--gutter)', borderRadius: 'var(--radius-md)' } }));
-  ctx.el.append(
-    ...pageTitle('CHSL', 'Catholic High School League'),
-    leagueTabs('chsl', (id) => navigate(`${q.view === 'ratings' ? 'ratings' : q.view === 'standings' ? 'standings' : 'scores'}/${id}`, { replace: true })),
-    sportBar, ...(yearBar ? [yearBar] : []),
-    tabs(VIEWS, q.view, (v) => go({ view: v }), { label: 'Sections' }),
-    body,
-  );
+  ctx.el.append(...(jumps ? [jumps] : []), sportBar, ...(yearBar ? [yearBar] : []), body);
 
   let data;
   try { data = await loadChsl(sport, year); } catch (err) {
@@ -77,10 +91,18 @@ async function renderLeague(ctx, sport, seasons) {
   if (!ctx.isCurrent()) return;
   clear(body);
   const mine = featuredIds();
-  if (q.view === 'standings') body.append(...standingsView(data, mine));
-  else if (q.view === 'ratings') body.append(...ratingsView(data, mine));
+  if (section === 'standings') body.append(...standingsView(data, mine));
+  else if (section === 'ratings') body.append(...ratingsView(data, mine));
   else body.append(...scoresView(data, q.week, (w) => go({ week: w })));
   body.append(sourceNote(data));
+}
+
+// Old links (#/chsl?view=..., #/chsl/fb?view=...) forward to the regular screens
+function forwardLeague(ctx, sport) {
+  const sec = ['standings', 'ratings'].includes(ctx.query.view) ? ctx.query.view : 'scores';
+  const next = { sport: ctx.params.sport ? sport : '', year: ctx.query.year, week: ctx.query.week };
+  const qs = new URLSearchParams(Object.entries(next).filter(([, v]) => v)).toString();
+  navigate(`${sec}/chsl${qs ? `?${qs}` : ''}`, { replace: true });
 }
 
 const label = (sport, y) => (sport === 'fb' ? String(y) : `${y}–${String(y + 1).slice(2)}`);
@@ -250,7 +272,7 @@ async function renderTeam(ctx, sport, seasons) {
     h('p', { class: 'footnote' }, 'CHSL marks league games. ',
       h('a', { href: t.page, target: '_blank', rel: 'noopener' }, 'MHSAA team page'),
       id === 'toledo-st-johns-jesuit-oh' ? [' · ', h('a', { href: 'https://sjjtitans.com', target: '_blank', rel: 'noopener' }, 'St. John’s Jesuit athletics')] : null,
-      ' · ', h('a', { href: `#/chsl/${sport}?view=standings` }, 'CHSL standings')),
+      ' · ', h('a', { href: `#/standings/chsl?sport=${sport}` }, 'CHSL standings')),
   );
 }
 

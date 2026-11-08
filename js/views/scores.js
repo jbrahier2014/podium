@@ -27,11 +27,15 @@ function urlFor(league, q) {
 
 export default {
   async render(ctx) {
-    const league = LEAGUES[ctx.params.league] && ctx.params.league !== 'chsl' ? ctx.params.league : defaultLeague({ withChsl: true });
-    // Last looking at CHSL (or it's first in your order): open the CHSL screen
-    if (league === 'chsl') { navigate('chsl?view=scores', { replace: true }); return; }
+    const league = LEAGUES[ctx.params.league] ? ctx.params.league : defaultLeague({ withChsl: true });
     const q = ctx.query;
     ctx.setTitle('Scores');
+    // CHSL: its scores (with a Standings tile) right here, like the other leagues
+    if (league === 'chsl') {
+      ctx.el.append(...pageTitle('Scores'), leagueTabs('chsl', (id) => navigate(`scores/${id}`, { replace: true }), { chsl: true }));
+      const { chslSection } = await import('./chsl.js');
+      return chslSection(ctx, 'scores');
+    }
     const lg = league;
     // Polls and Standings as tiles under the league tabs (they used to float in the top bar)
     const tile = (href, iconName, title, sub) => h('a', { href, class: 'jump-tile' },
@@ -46,7 +50,7 @@ export default {
     const body = h('div', {}, skeletonList());
     ctx.el.append(
       ...pageTitle('Scores'),
-      leagueTabs(league, (id) => navigate(`scores/${id}`, { replace: true }), { chsl: 'scores' }),
+      leagueTabs(league, (id) => navigate(`scores/${id}`, { replace: true }), { chsl: true }),
       jumps,
       controls,
       body,
