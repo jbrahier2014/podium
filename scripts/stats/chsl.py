@@ -686,7 +686,9 @@ def update(log, force=False):
         for year in (cur - 1, cur):
             path = DATA / "chsl" / f"{sport}-{year}.json"
             have = read_json(path, {}) or {}
-            if have.get("final") and not force:
+            # A finished season is never rebuilt, unless it was built without St. John's
+            # own schedule (its games against Ohio teams are only there)
+            if have.get("final") and not force and (have.get("sources") or {}).get("sjj") != "unavailable":
                 continue
             if year == cur and not in_season(sport, today) and have and not force:
                 # Off-season: refresh once a week so a new schedule shows up
