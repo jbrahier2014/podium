@@ -13,28 +13,37 @@ export const isStandalone = matchMedia('(display-mode: standalone)').matches || 
 document.documentElement.classList.toggle('standalone', isStandalone);
 
 // Keep the top and tab bars on the visible edges of the screen. iPhone home-screen
-// apps sometimes shift the area pinned bars attach to (after resuming, or when the
-// page bounces past its end), leaving the tab bar floating mid-screen. The visual
-// viewport says where the visible part really is; nudge the bars back onto it.
+// apps sometimes shift the area pinned bars attach to (seen after the app resumed),
+// leaving the tab bar floating mid-screen. The visual viewport says where the
+// visible part really is; once everything has settled, nudge the bars back onto it.
+// Never during scrolling: the rubber-band bounce moves the viewport on purpose.
 function anchorBars() {
   const vv = window.visualViewport;
   const nav = document.getElementById('navbar');
   const tab = document.getElementById('tabbar');
   if (!vv || !nav || !tab) return;
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  const bouncing = window.scrollY < 0 || window.scrollY > max + 1;
+  const zoomed = vv.scale && Math.abs(vv.scale - 1) > 0.01;
+  if (bouncing || zoomed) return;
   const top = Math.round(vv.offsetTop);
   const bottom = Math.round(vv.offsetTop + vv.height - window.innerHeight);
-  // Only correct real drift; leave pinch-zoom alone
-  const zoomed = vv.scale && Math.abs(vv.scale - 1) > 0.01;
-  nav.style.transform = !zoomed && top ? `translateY(${top}px)` : '';
-  tab.style.transform = !zoomed && bottom ? `translateY(${bottom}px)` : '';
+  nav.style.transform = top ? `translateY(${top}px)` : '';
+  tab.style.transform = bottom ? `translateY(${bottom}px)` : '';
 }
-if (window.visualViewport) {
-  visualViewport.addEventListener('resize', anchorBars);
-  visualViewport.addEventListener('scroll', anchorBars);
-}
-addEventListener('scroll', anchorBars, { passive: true });
-addEventListener('pageshow', anchorBars);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { anchorBars(); setTimeout(anchorBars, 300); } });
+let settle;
+const anchorSoon = (ms = 400) => { clearTimeout(settle); settle = setTimeout(anchorBars, ms); };
+// While a finger is down or the page is moving, wait; check once it's still
+addEventListener('scroll', () => clearTimeout(settle), { passive: true });
+addEventListener('touchend', () => {
+  clearTimeout(settle);
+  const wait = () => { const y = window.scrollY; settle = setTimeout(() => (window.scrollY === y ? anchorBars() : wait()), 250); };
+  wait();
+}, { passive: true });
+window.visualViewport?.addEventListener('resize', () => anchorSoon());
+addEventListener('orientationchange', () => anchorSoon(500));
+addEventListener('pageshow', () => anchorSoon(300));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) anchorSoon(300); });
 
 startRouter();
 
