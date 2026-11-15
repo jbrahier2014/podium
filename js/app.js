@@ -12,6 +12,22 @@ matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => app
 export const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 document.documentElement.classList.toggle('standalone', isStandalone);
 
+// iPhone home-screen app with the see-through status bar: iOS reports a window one
+// status bar shorter than the screen, which left a band under the tab bar. Size the
+// app frame to the real screen height instead (everywhere else, the window's).
+function fitFrame() {
+  let h = window.innerHeight;
+  if (navigator.standalone) {
+    const portrait = window.matchMedia('(orientation: portrait)').matches;
+    const screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    if (screenH > h && screenH - h <= 80) h = screenH; // only the status-bar shortfall
+  }
+  document.documentElement.style.setProperty('--app-h', `${h}px`);
+}
+fitFrame();
+addEventListener('resize', fitFrame);
+addEventListener('orientationchange', () => setTimeout(fitFrame, 300));
+
 startRouter();
 
 // An installed app has no reload button: coming back after 5+ minutes away
