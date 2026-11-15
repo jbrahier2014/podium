@@ -88,16 +88,17 @@ export function startRouter() {
     if (a.dataset.tab === activeTab) {
       e.preventDefault();
       if (stack.length > 1) navigate(stack[0].hash.replace(/^#\//, ''));
-      else window.scrollTo({ top: 0, behavior: 'smooth' });
+      else els.view.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }));
   addEventListener('hashchange', onHashChange);
-  addEventListener('scroll', onScroll, { passive: true });
+  // The page itself never scrolls (see .view in app.css): only the view does
+  els.view.addEventListener('scroll', onScroll, { passive: true });
   onHashChange();
 }
 
 function onScroll() {
-  els.navbar.classList.toggle('scrolled', window.scrollY > 4);
+  els.navbar.classList.toggle('scrolled', els.view.scrollTop > 4);
 }
 
 async function onHashChange() {
@@ -109,7 +110,7 @@ async function onHashChange() {
   const isTabRoot = TABS.includes(root);
 
   // Work out the transition: tab switch, push, or pop.
-  if (stack.length) stack[stack.length - 1].scrollY = window.scrollY;
+  if (stack.length) stack[stack.length - 1].scrollY = els.view.scrollTop;
   let kind;
   if (isTabRoot) {
     kind = root === activeTab && stack.length > 1 ? 'pop' : 'tab';
@@ -178,12 +179,32 @@ async function onHashChange() {
   }
 
   watchLargeTitle();
-  window.scrollTo(0, kind === 'pop' ? entry.scrollY || 0 : 0);
+  restoreScroll(kind === 'pop' ? entry.scrollY || 0 : 0);
   onScroll();
 }
 
 function titleForTab(tab) {
   return { home: 'Home', scores: 'Scores', ratings: 'Ratings', explore: 'Explore', more: 'More' }[tab] || 'Back';
+}
+
+// Going back returns to where you were. Screens often finish loading after this
+// point, so keep trying while the content grows (up to 2 s), unless you scroll.
+let restoring;
+function restoreScroll(top) {
+  restoring?.();
+  els.view.scrollTo(0, top);
+  if (!top) return;
+  let raf = 0; const until = performance.now() + 2000;
+  const stop = () => { cancelAnimationFrame(raf); els.view.removeEventListener('touchstart', stop); els.view.removeEventListener('wheel', stop); restoring = null; };
+  const tick = () => {
+    els.view.scrollTo(0, top);
+    if (Math.abs(els.view.scrollTop - top) < 2 || performance.now() > until) return stop();
+    raf = requestAnimationFrame(tick);
+  };
+  els.view.addEventListener('touchstart', stop, { passive: true });
+  els.view.addEventListener('wheel', stop, { passive: true });
+  restoring = stop;
+  raf = requestAnimationFrame(tick);
 }
 
 // Show the small centered title only after the page title scrolls under the bar.
@@ -195,6 +216,6 @@ function watchLargeTitle() {
   els.navbar.classList.remove('show-title');
   titleObserver = new IntersectionObserver(([e]) => {
     els.navbar.classList.toggle('show-title', !e.isIntersecting);
-  }, { rootMargin: `-${els.navbar.offsetHeight}px 0px 0px 0px`, threshold: 0 });
+  }, { root: els.view, threshold: 0 });
   titleObserver.observe(lt);
 }

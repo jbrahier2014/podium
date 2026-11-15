@@ -48,7 +48,13 @@ export function footText(g) {
   return null;
 }
 
-const cardSide = (s) => ({
+// The team with the ball, in a live football game (none during a kickoff, when ESPN
+// marks the kicking team)
+const hasBall = (g, s) => g.status.state === 'in' && g.league !== 'mlb' && !!g.situation?.possession
+  && String(g.situation.possession) === String(s.team.id) && !(g.situation.kickoff && !g.situation.downDistance);
+
+const cardSide = (s, g) => ({
+  ball: g ? hasBall(g, s) : false,
   name: s.team.short || s.team.name,
   abbr: s.team.abbr,
   color: s.team.color,
@@ -71,8 +77,8 @@ export function gameCard(g, { showLeague = false, showDay = false } = {}) {
     competition: context,
     status: state,
     clock: statusText(g, { showDay }),
-    home: cardSide(g.home),
-    away: cardSide(g.away),
+    home: cardSide(g.home, g),
+    away: cardSide(g.away, g),
     href: g.href !== undefined ? g.href : `#/game/${g.league}/${g.id}`,
     foot: footText(g),
   });

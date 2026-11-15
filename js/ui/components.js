@@ -139,6 +139,14 @@ export function choice(items, value, onChange, { label } = {}) {
  * home/away: { name, short, abbr, color, ink, score, record }
  * In a final, the losing side goes ink-muted.
  */
+// A small football, next to the team with the ball
+function footballIcon() {
+  const el = h('span', { class: 'sc-ball', role: 'img', 'aria-label': 'Has the ball', title: 'Has the ball' });
+  el.innerHTML = '<svg viewBox="0 0 24 14" aria-hidden="true"><ellipse cx="12" cy="7" rx="11" ry="6.2" fill="currentColor"/>'
+    + '<path d="M7.5 7h9M10 5.4v3.2M12 5.4v3.2M14 5.4v3.2" stroke="var(--surface)" stroke-width="1.3" stroke-linecap="round"/></svg>';
+  return el;
+}
+
 export function scoreCard({ competition, status, clock, home, away, href, foot }) {
   const final = status === 'final';
   const loser = final && home.score !== away.score ? (home.score < away.score ? 'home' : 'away') : null;
@@ -147,7 +155,8 @@ export function scoreCard({ competition, status, clock, home, away, href, foot }
     : final ? badge(clock || 'FT', 'strong') : badge(clock || 'Upcoming');
   const row = (t, side) => h('div', { class: `sc-row${loser === side ? ' loser' : ''}` },
     crest(t),
-    h('span', { class: 'sc-team' }, t.rank ? h('span', { class: 'sc-rank' }, t.rank) : null, t.name, t.record ? h('span', { class: 'rec' }, t.record) : null),
+    h('span', { class: 'sc-team' }, t.rank ? h('span', { class: 'sc-rank' }, t.rank) : null, t.name, t.record ? h('span', { class: 'rec' }, t.record) : null,
+      t.ball ? footballIcon() : null),
     status !== 'upcoming' ? h('span', { class: 'sc-score' }, t.score ?? '') : null);
   return h(href ? 'a' : 'div', { class: 'scorecard', href },
     h('div', { class: 'sc-head' }, h('span', { class: 'sc-comp' }, competition || ''), statusBadge),
@@ -190,21 +199,42 @@ export function chips(items, value, onChange, { label = 'Filter' } = {}) {
  * lowerIsBetter flips which side leads (e.g. turnovers).
  */
 export function statBar({ label, home, away, format = (v) => v, lowerIsBetter = false, display }) {
-  // Small counts (turnovers, sacks: 0 vs 1) get one extra on each side so the split
-  // reads 33/67 rather than 0/100; larger numbers are plain shares
-  const pad = Math.max(Math.abs(home), Math.abs(away)) <= 5 && Number.isInteger(home) && Number.isInteger(away) ? 1 : 0;
-  const total = Math.abs(home) + Math.abs(away) + 2 * pad || 1;
+  // Each team gets its own half of the track, growing out from the middle, sized by
+  // its own number against the larger one. A 0 gets no bar. For lower-is-better
+  // stats (turnovers, penalties) bars still show the counts; the better (lower)
+  // side is the one highlighted.
+  const a = Math.abs(home); const b = Math.abs(away);
   const homeLeads = lowerIsBetter ? home < away : home > away;
   const awayLeads = lowerIsBetter ? away < home : away > home;
-  return h('div', { class: 'statbar' },
+  const max = Math.max(a, b);
+  const share = [max ? a / max : 0, max ? b / max : 0];
+  const half = (s, leads, side) => h('span', { class: `rb-half ${side}${s > 0 ? '' : ' none'}` },
+    s > 0 ? h('span', { class: `rb-fill${leads ? ' lead' : ''}`, style: { width: `${Math.max(2, Math.round(s * 100))}%` } }) : null);
+  return h('div', { class: 'statbar rate' },
     h('div', { class: 'sb-labels' },
       h('span', { class: `sb-val${homeLeads ? '' : ' trail'}` }, display ? display[0] : format(home)),
       h('span', { class: 'sb-name' }, label),
       h('span', { class: `sb-val${awayLeads ? '' : ' trail'}` }, display ? display[1] : format(away))),
-    h('div', { class: 'sb-track' },
-      // Longer bar = better side: for lower-is-better stats the shares swap
-      h('span', { class: `sb-seg${homeLeads ? ' lead' : ''}`, style: { flex: String((Math.abs(lowerIsBetter ? away : home) + pad) / total || 0.5) } }),
-      h('span', { class: `sb-seg${awayLeads ? ' lead' : ''}`, style: { flex: String((Math.abs(lowerIsBetter ? home : away) + pad) / total || 0.5) } })));
+    h('div', { class: 'sb-track', 'aria-hidden': 'true' }, half(share[0], homeLeads, 'left'), half(share[1], awayLeads, 'right')));
+}
+
+/**
+ * Conversion rates (3rd down 5-12, 4th down 1-1, red zone, completions): each team
+ * gets its own half-track filled to its rate, so 1-1 vs 0-0 reads as 100% vs no
+ * attempts instead of a lopsided share. a / b = { rate (0..1), att, display }.
+ */
+export function rateBar({ label, a, b }) {
+  const has = (x) => x.att > 0;
+  const aLeads = has(a) && (!has(b) || a.rate > b.rate);
+  const bLeads = has(b) && (!has(a) || b.rate > a.rate);
+  const val = (x, leads) => h('span', { class: `sb-val${leads ? '' : ' trail'}` }, x.display,
+    has(x) ? h('span', { class: 'sb-pct' }, `${Math.round(x.rate * 100)}%`) : null);
+  // No attempts: no bar at all, not even the empty track
+  const half = (x, leads, side) => h('span', { class: `rb-half ${side}${has(x) ? '' : ' none'}` },
+    has(x) ? h('span', { class: `rb-fill${leads ? ' lead' : ''}`, style: { width: `${Math.max(2, Math.round(x.rate * 100))}%` } }) : null);
+  return h('div', { class: 'statbar rate' },
+    h('div', { class: 'sb-labels' }, val(a, aLeads), h('span', { class: 'sb-name' }, label), val(b, bLeads)),
+    h('div', { class: 'sb-track', 'aria-hidden': 'true' }, half(a, aLeads, 'left'), half(b, bLeads, 'right')));
 }
 
 /**

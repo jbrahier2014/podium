@@ -116,7 +116,13 @@ export async function pickFromGames(games, { featuredIds = new Set(), limit = 5 
     if (!H || !A) continue;
     const mine = featuredIds.has(`${g.league}:${H.team.id}`) || featuredIds.has(`${g.league}:${A.team.id}`);
     const c = classify(g, rxs[g.league]);
-    if (mine) picks.push({ game: g, tier: 0, mine, reasons: ['Your team', ...(c?.reasons || [])].slice(0, 2) });
+    if (mine) {
+      // The "Your team" badge already says why it's here; the text adds what's worth
+      // knowing about the game (closeness, rankings), else the line
+      let reasons = c?.reasons?.length ? c.reasons : interest(g, rxs[g.league]).reasons;
+      if (!reasons.length && g.status.state === 'pre' && g.odds?.text) reasons = [g.odds.text];
+      picks.push({ game: g, tier: 0, mine, reasons: reasons.slice(0, 2) });
+    }
     else if (c) picks.push({ game: g, tier: c.tier, mine, reasons: c.reasons });
   }
   const live = (x) => (x.game.status.state === 'in' ? 0 : 1);

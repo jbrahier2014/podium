@@ -269,6 +269,8 @@ function statValue(display, kind, sep = '-') {
   return Number(s) || 0;
 }
 
+const attempts = (display, sep = '-') => Number(String(display ?? '').trim().split(sep)[1]) || 0;
+
 const clockSeconds = (c) => { const [m, s] = String(c || '0:00').split(':').map(Number); return (m || 0) * 60 + (s || 0); };
 
 /** Minutes of game time elapsed at a play (regulation quarters are 15 min). */
@@ -416,6 +418,8 @@ export async function getGame(league, gameId, { force = false } = {}) {
     away: statValue(pick(awayStats, name), kind, sep), home: statValue(pick(homeStats, name), kind, sep),
     awayDisplay: String(pick(awayStats, name)).trim(), homeDisplay: String(pick(homeStats, name)).trim(),
     lowerIsBetter: lower,
+    // Conversions (3rd/4th down, red zone, completions): made out of attempts
+    ...(kind === 'ratio' ? { rate: true, awayAtt: attempts(pick(awayStats, name), sep), homeAtt: attempts(pick(homeStats, name), sep) } : {}),
   })) : [];
 
   // Box score: player lines by category

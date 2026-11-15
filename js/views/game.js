@@ -9,7 +9,7 @@ import { settings } from '../store/settings.js';
 import { getGame } from '../data/index.js';
 import { etDay, etTime } from '../util/time.js';
 import { livePoller } from '../util/poller.js';
-import { crest, badge, tabs, chips, statBar, emptyState } from '../ui/components.js';
+import { crest, badge, tabs, chips, statBar, rateBar, emptyState } from '../ui/components.js';
 import { footText } from '../ui/format.js';
 import { loadEP } from '../data/ep.js';
 import { epSection, drawEPA, epaById, epaChip } from './game-ep.js';
@@ -295,5 +295,7 @@ function drawStats(el, d) {
   if (!d.teamStats?.length) { el.append(h('div', { class: 'card' }, emptyState({ iconName: 'scoreboard', title: 'No team stats yet', text: 'They fill in once the game starts.' }))); return; }
   el.append(h('div', { class: 'card stat-compare' },
     h('div', { class: 'sc-teams' }, h('span', {}, crest(g.away.team, 'sm'), g.away.team.abbr), h('span', {}, g.home.team.abbr, crest(g.home.team, 'sm'))),
-    d.teamStats.map((s) => statBar({ label: s.label, home: s.away, away: s.home, lowerIsBetter: s.lowerIsBetter, display: [s.awayDisplay, s.homeDisplay] }))));
+    d.teamStats.map((s) => (s.rate
+      ? rateBar({ label: s.label, a: { rate: s.away, att: s.awayAtt, display: s.awayDisplay }, b: { rate: s.home, att: s.homeAtt, display: s.homeDisplay } })
+      : statBar({ label: s.label, home: s.away, away: s.home, lowerIsBetter: s.lowerIsBetter, display: [s.awayDisplay, s.homeDisplay] })))));
 }

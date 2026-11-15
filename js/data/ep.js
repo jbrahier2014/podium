@@ -211,11 +211,23 @@ export function summarize(rows, game) {
   const series = { [ids[0]]: [{ x: 0, y: 0 }], [ids[1]]: [{ x: 0, y: 0 }] };
   const run = { [ids[0]]: 0, [ids[1]]: 0 };
   const minuteOf = (r) => (r.period <= 4 ? (r.period - 1) * 15 + (15 - r.clockSecs / 60) : 60 + (r.period - 5) * 10 + (10 - Math.min(600, r.clockSecs) / 60));
-  for (const r of rows) {
-    if (r.epa == null || !series[r.offense]) continue;
+  // Game time for each play, cleaned up: ESPN sometimes gives a play a wrong or
+  // out-of-order clock, which drew the line back over itself. A play's time is the
+  // middle of its own and its neighbours' (so one bad clock can't jump), and time
+  // never runs backwards.
+  const plays = rows.filter((r) => r.epa != null && series[r.offense]);
+  const raw = plays.map(minuteOf);
+  let last = 0;
+  const xs = raw.map((m, i) => {
+    const near = [raw[i - 1], m, raw[i + 1]].filter((v) => v != null && Number.isFinite(v)).sort((a, b) => a - b);
+    const mid = near.length === 3 ? near[1] : m;
+    last = Math.max(last, Number.isFinite(mid) ? mid : last);
+    return last;
+  });
+  plays.forEach((r, i) => {
     run[r.offense] += r.epa;
-    series[r.offense].push({ x: Math.round(minuteOf(r) * 10) / 10, y: Math.round(run[r.offense] * 100) / 100, label: r.text });
-  }
+    series[r.offense].push({ x: Math.round(xs[i] * 10) / 10, y: Math.round(run[r.offense] * 100) / 100, label: r.text });
+  });
   const biggest = rows.filter((r) => r.epa != null).sort((a, b) => Math.abs(b.epa) - Math.abs(a.epa)).slice(0, 5);
   return { teams, series, biggest };
 }
