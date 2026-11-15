@@ -1041,7 +1041,10 @@ table.stats th:first-child, table.stats td:first-child { padding-left: var(--spa
    the area they attach to after the app resumes or the page overscrolls), leaving
    the tab bar floating mid-screen. In a fixed frame there's nothing to drift. */
 html, body { height: 100%; overflow: hidden; }
-#app { height: 100%; display: flex; flex-direction: column; }
+/* The frame covers the whole screen: on iPhone home-screen apps with the see-through
+   status bar, a 100% height stops short by the status bar's height, leaving a band
+   under the tab bar */
+#app { position: fixed; inset: 0; display: flex; flex-direction: column; }
 .navbar { position: relative; flex: none; }
 .tabbar { position: relative; flex: none; }
 .view {
