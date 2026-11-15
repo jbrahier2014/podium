@@ -1040,7 +1040,12 @@ table.stats th:first-child, table.stats td:first-child { padding-left: var(--spa
    On iPhone home-screen apps, fixed bars on a scrolling page can drift (iOS offsets
    the area they attach to after the app resumes or the page overscrolls), leaving
    the tab bar floating mid-screen. In a fixed frame there's nothing to drift. */
-html, body { height: 100%; overflow: hidden; }
+/* No height on html/body: with the see-through status bar, iOS makes a 100% height
+   one status bar short, and pinned elements then stop short of the bottom too.
+   The page has nothing in normal flow (#app is pinned), so it can't scroll. */
+html, body { overflow: hidden; overscroll-behavior: none; }
+/* Below the frame, if iOS ever leaves a sliver, show the tab bar's colour */
+html, body { background: var(--surface); }
 /* The frame covers the whole screen: on iPhone home-screen apps with the see-through
    status bar, a 100% height stops short by the status bar's height, leaving a band
    under the tab bar */
