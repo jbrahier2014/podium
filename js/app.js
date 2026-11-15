@@ -12,21 +12,29 @@ matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => app
 export const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 document.documentElement.classList.toggle('standalone', isStandalone);
 
-// iPhone home-screen app with the see-through status bar: iOS reports a window one
-// status bar shorter than the screen, which left a band under the tab bar. Size the
-// app frame to the real screen height instead (everywhere else, the window's).
-function fitFrame() {
-  let h = window.innerHeight;
-  if (navigator.standalone) {
-    const portrait = window.matchMedia('(orientation: portrait)').matches;
-    const screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-    if (screenH > h && screenH - h <= 80) h = screenH; // only the status-bar shortfall
-  }
-  document.documentElement.style.setProperty('--app-h', `${h}px`);
+// Keep the top and tab bars on the visible edges of the screen. iPhone home-screen
+// apps sometimes shift the area pinned bars attach to (after resuming, or when the
+// page bounces past its end), leaving the tab bar floating mid-screen. The visual
+// viewport says where the visible part really is; nudge the bars back onto it.
+function anchorBars() {
+  const vv = window.visualViewport;
+  const nav = document.getElementById('navbar');
+  const tab = document.getElementById('tabbar');
+  if (!vv || !nav || !tab) return;
+  const top = Math.round(vv.offsetTop);
+  const bottom = Math.round(vv.offsetTop + vv.height - window.innerHeight);
+  // Only correct real drift; leave pinch-zoom alone
+  const zoomed = vv.scale && Math.abs(vv.scale - 1) > 0.01;
+  nav.style.transform = !zoomed && top ? `translateY(${top}px)` : '';
+  tab.style.transform = !zoomed && bottom ? `translateY(${bottom}px)` : '';
 }
-fitFrame();
-addEventListener('resize', fitFrame);
-addEventListener('orientationchange', () => setTimeout(fitFrame, 300));
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', anchorBars);
+  visualViewport.addEventListener('scroll', anchorBars);
+}
+addEventListener('scroll', anchorBars, { passive: true });
+addEventListener('pageshow', anchorBars);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { anchorBars(); setTimeout(anchorBars, 300); } });
 
 startRouter();
 

@@ -88,17 +88,16 @@ export function startRouter() {
     if (a.dataset.tab === activeTab) {
       e.preventDefault();
       if (stack.length > 1) navigate(stack[0].hash.replace(/^#\//, ''));
-      else els.view.scrollTo({ top: 0, behavior: 'smooth' });
+      else window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }));
   addEventListener('hashchange', onHashChange);
-  // The page itself never scrolls (see .view in app.css): only the view does
-  els.view.addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('scroll', onScroll, { passive: true });
   onHashChange();
 }
 
 function onScroll() {
-  els.navbar.classList.toggle('scrolled', els.view.scrollTop > 4);
+  els.navbar.classList.toggle('scrolled', window.scrollY > 4);
 }
 
 async function onHashChange() {
@@ -110,7 +109,7 @@ async function onHashChange() {
   const isTabRoot = TABS.includes(root);
 
   // Work out the transition: tab switch, push, or pop.
-  if (stack.length) stack[stack.length - 1].scrollY = els.view.scrollTop;
+  if (stack.length) stack[stack.length - 1].scrollY = window.scrollY;
   let kind;
   if (isTabRoot) {
     kind = root === activeTab && stack.length > 1 ? 'pop' : 'tab';
@@ -192,17 +191,17 @@ function titleForTab(tab) {
 let restoring;
 function restoreScroll(top) {
   restoring?.();
-  els.view.scrollTo(0, top);
+  window.scrollTo(0, top);
   if (!top) return;
   let raf = 0; const until = performance.now() + 2000;
-  const stop = () => { cancelAnimationFrame(raf); els.view.removeEventListener('touchstart', stop); els.view.removeEventListener('wheel', stop); restoring = null; };
+  const stop = () => { cancelAnimationFrame(raf); removeEventListener('touchstart', stop); removeEventListener('wheel', stop); restoring = null; };
   const tick = () => {
-    els.view.scrollTo(0, top);
-    if (Math.abs(els.view.scrollTop - top) < 2 || performance.now() > until) return stop();
+    window.scrollTo(0, top);
+    if (Math.abs(window.scrollY - top) < 2 || performance.now() > until) return stop();
     raf = requestAnimationFrame(tick);
   };
-  els.view.addEventListener('touchstart', stop, { passive: true });
-  els.view.addEventListener('wheel', stop, { passive: true });
+  addEventListener('touchstart', stop, { passive: true });
+  addEventListener('wheel', stop, { passive: true });
   restoring = stop;
   raf = requestAnimationFrame(tick);
 }
@@ -216,6 +215,6 @@ function watchLargeTitle() {
   els.navbar.classList.remove('show-title');
   titleObserver = new IntersectionObserver(([e]) => {
     els.navbar.classList.toggle('show-title', !e.isIntersecting);
-  }, { root: els.view, threshold: 0 });
+  }, { rootMargin: `-${els.navbar.offsetHeight}px 0px 0px 0px`, threshold: 0 });
   titleObserver.observe(lt);
 }

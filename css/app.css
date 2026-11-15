@@ -1036,29 +1036,6 @@ table.stats th:first-child, table.stats td:first-child { padding-left: var(--spa
 .statbar.rate .sb-labels > .sb-val:last-child .sb-pct { margin-left: 0; margin-right: 6px; }
 .statbar.rate .sb-labels > .sb-val:last-child { display: inline-flex; flex-direction: row-reverse; align-items: baseline; }
 
-/* ---------- App frame: the page never scrolls, only the view between the bars.
-   On iPhone home-screen apps, fixed bars on a scrolling page can drift (iOS offsets
-   the area they attach to after the app resumes or the page overscrolls), leaving
-   the tab bar floating mid-screen. In a fixed frame there's nothing to drift. */
-/* No height on html/body: with the see-through status bar, iOS makes a 100% height
-   one status bar short, and pinned elements then stop short of the bottom too.
-   The page has nothing in normal flow (#app is pinned), so it can't scroll. */
-html, body { overflow: hidden; overscroll-behavior: none; }
-/* Below the frame, if iOS ever leaves a sliver, show the tab bar's colour */
-html, body { background: var(--surface); }
-/* The frame covers the whole screen: on iPhone home-screen apps with the see-through
-   status bar, a 100% height stops short by the status bar's height, leaving a band
-   under the tab bar */
-#app { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100%); display: flex; flex-direction: column; }
-.navbar { position: relative; flex: none; }
-.tabbar { position: relative; flex: none; }
-.view {
-  flex: 1 1 auto; min-height: 0;
-  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
-  padding-top: 0;
-  padding-bottom: var(--space-6);
-}
-
 /* No double-tap to zoom (pinch still works), and taps register without the wait
    for a possible second tap */
 html, body, button, a, input, select, label, [role="button"] { touch-action: manipulation; }
