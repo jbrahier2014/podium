@@ -38,6 +38,7 @@ export default {
     const recent = h('div', { hidden: true });
     const today = h('div', {}, h('div', { class: 'game-list' }, h('div', { class: 'skeleton', style: { height: '112px', borderRadius: 'var(--radius-md)' } })));
     const dyk = h('div', { class: 'card' }, h('div', { class: 'skeleton', style: { height: '96px' } }));
+    const dykHead = sectionHeader({ title: 'Did you know?' });
 
     // Nightly ratings for each featured league: power rank on the cards + the daily outlier
     const ratings = {};
@@ -53,7 +54,7 @@ export default {
       recent,
       sectionHeader({ title: 'Today', action: 'Scoreboard', href: '#/scores' }),
       today,
-      sectionHeader({ title: 'Did you know?' }),
+      dykHead,
       dyk,
     );
 
@@ -101,8 +102,9 @@ export default {
     await Promise.all(Object.keys(ratings).map((l) => getTeams(l).then(({ teams: list }) => { info[l] = new Map(list.map((t) => [String(t.id), t])); }).catch(() => {})));
     if (!ctx.isCurrent()) return;
     const facts = buildFacts(teams, ratings, info);
-    drawDidYouKnow(dyk, facts);
-    const onVisible = () => { if (document.visibilityState === 'visible' && ctx.isCurrent()) drawDidYouKnow(dyk, facts); };
+    shownFact = null; // a new visit to Home, a new fact
+    drawDidYouKnow(dyk, facts, dykHead);
+    const onVisible = () => { if (document.visibilityState === 'visible' && ctx.isCurrent()) drawDidYouKnow(dyk, facts, dykHead); };
     document.addEventListener('visibilitychange', onVisible);
     ctx.onCleanup(() => document.removeEventListener('visibilitychange', onVisible));
 
@@ -255,7 +257,12 @@ export function powerRank(data, team) {
  */
 function buildFacts(teams, ratings, info) {
   const facts = [];
-  const lower = (def) => (/^[A-Z]{2,}|^[A-Z]-|^x?wOBA|^ERA|^FIP|^WHIP|^OPS|^BABIP|^SP\+|^K-BB|^SRS|^EPA/.test(def.label) ? def.label : def.label.charAt(0).toLowerCase() + def.label.slice(1));
+  // In a sentence: lower-case unless it's an abbreviation, and a "%" label reads as
+  // a rate ("77.8% win rate", not "77.8% win %"), or baseball's "on-base percentage"
+  const lower = (def) => {
+    const label = def.label.replace(/\s*%$/, def.fmt === 'avg' ? ' percentage' : ' rate');
+    return /^[A-Z]{2,}|^[A-Z]-|^x?wOBA|^ERA|^FIP|^WHIP|^OPS|^BABIP|^SP\+|^K-BB|^SRS|^EPA/.test(label) ? label : label.charAt(0).toLowerCase() + label.slice(1);
+  };
   const luckText = (name, t, league) => {
     const unit = league === 'mlb' ? 'run differential' : 'point differential';
     return `${name} ${/s$/.test(name) ? 'have' : 'has'} ${t.v.wins} wins, but their ${unit} says ${Math.round(t.v.pyth_w)}. That ${Math.abs(t.v.luck).toFixed(1)}-win ${t.v.luck > 0 ? 'cushion usually shrinks' : 'shortfall usually corrects'} over time.`;
@@ -305,20 +312,44 @@ function buildFacts(teams, ratings, info) {
   return facts;
 }
 
-const LAST_FACT = 'podium.lastFact';
-function drawDidYouKnow(el, facts) {
+// Facts you've already seen (by their wording, so a fact comes back only when its
+// numbers change and it says something new). Never the same one twice; when every
+// current fact has been seen, the section stays hidden until there are new ones.
+const SEEN_FACTS = 'podium.seenFacts';
+const SEEN_MAX = 400;
+function seenFacts() {
+  try { return JSON.parse(localStorage.getItem(SEEN_FACTS) || '[]'); } catch { return []; }
+}
+function markSeen(id) {
+  const seen = seenFacts().filter((x) => x !== id);
+  seen.push(id);
+  try { localStorage.setItem(SEEN_FACTS, JSON.stringify(seen.slice(-SEEN_MAX))); } catch { /* private mode */ }
+}
+const factId = (f) => `${f.key}|${f.text}`;
+
+// One fact per visit to Home: the same fact stays put while you're on Home
+let shownFact = null;
+function drawDidYouKnow(el, facts, head) {
   clear(el);
+  const show = (on) => { el.hidden = !on; if (head) head.hidden = !on; };
   if (!facts.length) {
+    show(true);
     el.append(emptyState({ iconName: 'bulb', title: 'Did you know?', text: 'Unusual numbers about your teams and the league, once the nightly stats run.' }));
     return;
   }
-  let last = null;
-  try { last = localStorage.getItem(LAST_FACT); } catch { /* ignore */ }
-  // Your teams' facts come up about 60% of the time
-  const mine = facts.filter((f) => f.mine && f.key !== last); const other = facts.filter((f) => !f.mine && f.key !== last);
-  const pool = (mine.length && (!other.length || Math.random() < 0.6)) ? mine : (other.length ? other : facts);
-  const fact = pool[Math.floor(Math.random() * pool.length)];
-  try { localStorage.setItem(LAST_FACT, fact.key); } catch { /* ignore */ }
+  let fact = shownFact && facts.find((f) => factId(f) === shownFact);
+  if (!fact) {
+    const seen = new Set(seenFacts());
+    const fresh = facts.filter((f) => !seen.has(factId(f)));
+    if (!fresh.length) { show(false); return; }
+    // Your teams' facts come up about 60% of the time
+    const mine = fresh.filter((f) => f.mine); const other = fresh.filter((f) => !f.mine);
+    const pool = (mine.length && (!other.length || Math.random() < 0.6)) ? mine : (other.length ? other : fresh);
+    fact = pool[Math.floor(Math.random() * pool.length)];
+    shownFact = factId(fact);
+    markSeen(shownFact);
+  }
+  show(true);
   el.append(h('a', { class: 'dyk', href: `#/team/${fact.team.league}/${fact.team.id}?tab=advanced` },
     crest(fact.team),
     h('div', {}, h('div', { class: 'dyk-text' }, fact.text), h('div', { class: 't-caption', style: { marginTop: 'var(--space-1)' } }, 'See the full fingerprint'))));
