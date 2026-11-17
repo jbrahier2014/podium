@@ -24,6 +24,10 @@ const screenHeight = () => (window.matchMedia('(orientation: portrait)').matches
   ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height));
 let nudged = false;
 
+// Current translateY on a bar (what we added last time), to measure where it would
+// sit without it
+const shiftOf = (el) => Number((el.style.transform.match(/translateY\((-?[\d.]+)px\)/) || [])[1] || 0);
+
 function anchorBars() {
   const vv = window.visualViewport;
   const nav = document.getElementById('navbar');
@@ -32,15 +36,16 @@ function anchorBars() {
   const max = document.documentElement.scrollHeight - window.innerHeight;
   const bouncing = window.scrollY < 0 || window.scrollY > max + 1;
   const zoomed = vv.scale && Math.abs(vv.scale - 1) > 0.01;
-  if (bouncing || zoomed) return;
-  const top = Math.round(vv.offsetTop);
-  let bottom = Math.round(vv.offsetTop + vv.height - window.innerHeight);
-  // Stuck short: after a screenshot (its preview covers the app) iOS can leave the
-  // window much shorter than the screen, and the visual viewport agrees with it, so
-  // the check above sees nothing wrong. From the home screen with no keyboard up, a
-  // window well short of the screen is that bug: first ask iOS to re-measure (a
-  // 1px scroll), and if it's still short, put the tab bar at the real bottom.
-  const short = standalone() && !typing() ? screenHeight() - window.innerHeight : 0;
+  if (bouncing || zoomed || typing()) return;
+  // Measure where the bars really are, not where iOS says the window is: after a
+  // screenshot iOS can report the right window size yet still draw pinned bars
+  // against a stale, shorter screen (tab bar floating mid-screen). The visible area
+  // runs from vv.offsetTop to vv.offsetTop + vv.height; put the bars on its edges.
+  const visTop = vv.offsetTop;
+  let visBottom = vv.offsetTop + vv.height;
+  // And if iOS does report a window well short of the real screen (home-screen
+  // app), the visible bottom is the screen's bottom
+  const short = standalone() ? screenHeight() - window.innerHeight : 0;
   if (short > 80) {
     if (!nudged) {
       nudged = true;
@@ -49,10 +54,14 @@ function anchorBars() {
       setTimeout(anchorBars, 150);
       return;
     }
-    bottom = short;
+    visBottom = window.innerHeight + short;
   } else nudged = false;
-  nav.style.transform = top ? `translateY(${top}px)` : '';
-  tab.style.transform = bottom ? `translateY(${bottom}px)` : '';
+  const navTop = nav.getBoundingClientRect().top - shiftOf(nav);
+  const tabBottom = tab.getBoundingClientRect().bottom - shiftOf(tab);
+  const dTop = Math.round(visTop - navTop);
+  const dBottom = Math.round(visBottom - tabBottom);
+  nav.style.transform = Math.abs(dTop) > 1 ? `translateY(${dTop}px)` : '';
+  tab.style.transform = Math.abs(dBottom) > 1 ? `translateY(${dBottom}px)` : '';
 }
 let settle;
 const anchorSoon = (ms = 400) => { clearTimeout(settle); settle = setTimeout(anchorBars, ms); };
